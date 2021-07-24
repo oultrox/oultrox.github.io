@@ -33631,5 +33631,6 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Browser.prototype.cnds.OnUpdateReady,
 	cr.plugins_.Browser.prototype.acts.Reload,
 	cr.plugins_.ValerypopoffJSPlugin.prototype.cnds.AllScriptsLoaded,
+	cr.system_object.prototype.cnds.IsPreview,
 	cr.system_object.prototype.exps.projectversion
 ];};
