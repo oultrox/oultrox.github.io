@@ -20176,6 +20176,587 @@ cr.plugins_.Mouse = function(runtime)
 }());
 ;
 ;
+cr.plugins_.Particles = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Particles.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+		if (this.is_family)
+			return;
+		this.texture_img = new Image();
+		this.texture_img.cr_filesize = this.texture_filesize;
+		this.webGL_texture = null;
+		this.runtime.waitForImageLoad(this.texture_img, this.texture_file);
+	};
+	typeProto.onLostWebGLContext = function ()
+	{
+		if (this.is_family)
+			return;
+		this.webGL_texture = null;
+	};
+	typeProto.onRestoreWebGLContext = function ()
+	{
+		if (this.is_family || !this.instances.length)
+			return;
+		if (!this.webGL_texture)
+		{
+			this.webGL_texture = this.runtime.glwrap.loadTexture(this.texture_img, true, this.runtime.linearSampling, this.texture_pixelformat);
+		}
+	};
+	typeProto.loadTextures = function ()
+	{
+		if (this.is_family || this.webGL_texture || !this.runtime.glwrap)
+			return;
+		this.webGL_texture = this.runtime.glwrap.loadTexture(this.texture_img, true, this.runtime.linearSampling, this.texture_pixelformat);
+	};
+	typeProto.unloadTextures = function ()
+	{
+		if (this.is_family || this.instances.length || !this.webGL_texture)
+			return;
+		this.runtime.glwrap.deleteTexture(this.webGL_texture);
+		this.webGL_texture = null;
+	};
+	typeProto.preloadCanvas2D = function (ctx)
+	{
+		ctx.drawImage(this.texture_img, 0, 0);
+	};
+	function Particle(owner)
+	{
+		this.owner = owner;
+		this.active = false;
+		this.x = 0;
+		this.y = 0;
+		this.speed = 0;
+		this.angle = 0;
+		this.opacity = 1;
+		this.grow = 0;
+		this.size = 0;
+		this.gs = 0;			// gravity speed
+		this.age = 0;
+		cr.seal(this);
+	};
+	Particle.prototype.init = function ()
+	{
+		var owner = this.owner;
+		this.x = owner.x - (owner.xrandom / 2) + (Math.random() * owner.xrandom);
+		this.y = owner.y - (owner.yrandom / 2) + (Math.random() * owner.yrandom);
+		this.speed = owner.initspeed - (owner.speedrandom / 2) + (Math.random() * owner.speedrandom);
+		this.angle = owner.angle - (owner.spraycone / 2) + (Math.random() * owner.spraycone);
+		this.opacity = owner.initopacity;
+		this.size = owner.initsize - (owner.sizerandom / 2) + (Math.random() * owner.sizerandom);
+		this.grow = owner.growrate - (owner.growrandom / 2) + (Math.random() * owner.growrandom);
+		this.gs = 0;
+		this.age = 0;
+	};
+	Particle.prototype.tick = function (dt)
+	{
+		var owner = this.owner;
+		this.x += Math.cos(this.angle) * this.speed * dt;
+		this.y += Math.sin(this.angle) * this.speed * dt;
+		this.y += this.gs * dt;
+		this.speed += owner.acc * dt;
+		this.size += this.grow * dt;
+		this.gs += owner.g * dt;
+		this.age += dt;
+		if (this.size < 1)
+		{
+			this.active = false;
+			return;
+		}
+		if (owner.lifeanglerandom !== 0)
+			this.angle += (Math.random() * owner.lifeanglerandom * dt) - (owner.lifeanglerandom * dt / 2);
+		if (owner.lifespeedrandom !== 0)
+			this.speed += (Math.random() * owner.lifespeedrandom * dt) - (owner.lifespeedrandom * dt / 2);
+		if (owner.lifeopacityrandom !== 0)
+		{
+			this.opacity += (Math.random() * owner.lifeopacityrandom * dt) - (owner.lifeopacityrandom * dt / 2);
+			if (this.opacity < 0)
+				this.opacity = 0;
+			else if (this.opacity > 1)
+				this.opacity = 1;
+		}
+		if (owner.destroymode <= 1 && this.age >= owner.timeout)
+		{
+			this.active = false;
+		}
+		if (owner.destroymode === 2 && this.speed <= 0)
+		{
+			this.active = false;
+		}
+	};
+	Particle.prototype.draw = function (ctx)
+	{
+		var curopacity = this.owner.opacity * this.opacity;
+		if (curopacity === 0)
+			return;
+		if (this.owner.destroymode === 0)
+			curopacity *= 1 - (this.age / this.owner.timeout);
+		ctx.globalAlpha = curopacity;
+		var drawx = this.x - this.size / 2;
+		var drawy = this.y - this.size / 2;
+		if (this.owner.runtime.pixel_rounding)
+		{
+			drawx = (drawx + 0.5) | 0;
+			drawy = (drawy + 0.5) | 0;
+		}
+		ctx.drawImage(this.owner.type.texture_img, drawx, drawy, this.size, this.size);
+	};
+	Particle.prototype.drawGL = function (glw)
+	{
+		var curopacity = this.owner.opacity * this.opacity;
+		if (this.owner.destroymode === 0)
+			curopacity *= 1 - (this.age / this.owner.timeout);
+		var drawsize = this.size;
+		var scaleddrawsize = drawsize * this.owner.particlescale;
+		var drawx = this.x - drawsize / 2;
+		var drawy = this.y - drawsize / 2;
+		if (this.owner.runtime.pixel_rounding)
+		{
+			drawx = (drawx + 0.5) | 0;
+			drawy = (drawy + 0.5) | 0;
+		}
+		if (scaleddrawsize < 1 || curopacity === 0)
+			return;
+		if (scaleddrawsize < glw.minPointSize || scaleddrawsize > glw.maxPointSize)
+		{
+			glw.setOpacity(curopacity);
+			glw.quad(drawx, drawy, drawx + drawsize, drawy, drawx + drawsize, drawy + drawsize, drawx, drawy + drawsize);
+		}
+		else
+			glw.point(this.x, this.y, scaleddrawsize, curopacity);
+	};
+	Particle.prototype.left = function ()
+	{
+		return this.x - this.size / 2;
+	};
+	Particle.prototype.right = function ()
+	{
+		return this.x + this.size / 2;
+	};
+	Particle.prototype.top = function ()
+	{
+		return this.y - this.size / 2;
+	};
+	Particle.prototype.bottom = function ()
+	{
+		return this.y + this.size / 2;
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	var deadparticles = [];
+	instanceProto.onCreate = function()
+	{
+		var props = this.properties;
+		this.rate = props[0];
+		this.spraycone = cr.to_radians(props[1]);
+		this.spraytype = props[2];			// 0 = continuous, 1 = one-shot
+		this.spraying = true;				// for continuous mode only
+		this.initspeed = props[3];
+		this.initsize = props[4];
+		this.initopacity = props[5] / 100.0;
+		this.growrate = props[6];
+		this.xrandom = props[7];
+		this.yrandom = props[8];
+		this.speedrandom = props[9];
+		this.sizerandom = props[10];
+		this.growrandom = props[11];
+		this.acc = props[12];
+		this.g = props[13];
+		this.lifeanglerandom = props[14];
+		this.lifespeedrandom = props[15];
+		this.lifeopacityrandom = props[16];
+		this.destroymode = props[17];		// 0 = fade, 1 = timeout, 2 = stopped
+		this.timeout = props[18];
+		this.particleCreateCounter = 0;
+		this.particlescale = 1;
+		this.particleBoxLeft = this.x;
+		this.particleBoxTop = this.y;
+		this.particleBoxRight = this.x;
+		this.particleBoxBottom = this.y;
+		this.add_bbox_changed_callback(function (self) {
+			self.bbox.set(self.particleBoxLeft, self.particleBoxTop, self.particleBoxRight, self.particleBoxBottom);
+			self.bquad.set_from_rect(self.bbox);
+			self.bbox_changed = false;
+			self.update_collision_cell();
+			self.update_render_cell();
+		});
+		if (!this.recycled)
+			this.particles = [];
+		this.runtime.tickMe(this);
+		this.type.loadTextures();
+		if (this.spraytype === 1)
+		{
+			for (var i = 0; i < this.rate; i++)
+				this.allocateParticle().opacity = 0;
+		}
+		this.first_tick = true;		// for re-init'ing one-shot particles on first tick so they assume any new angle/position
+	};
+	instanceProto.saveToJSON = function ()
+	{
+		var o = {
+			"r": this.rate,
+			"sc": this.spraycone,
+			"st": this.spraytype,
+			"s": this.spraying,
+			"isp": this.initspeed,
+			"isz": this.initsize,
+			"io": this.initopacity,
+			"gr": this.growrate,
+			"xr": this.xrandom,
+			"yr": this.yrandom,
+			"spr": this.speedrandom,
+			"szr": this.sizerandom,
+			"grnd": this.growrandom,
+			"acc": this.acc,
+			"g": this.g,
+			"lar": this.lifeanglerandom,
+			"lsr": this.lifespeedrandom,
+			"lor": this.lifeopacityrandom,
+			"dm": this.destroymode,
+			"to": this.timeout,
+			"pcc": this.particleCreateCounter,
+			"ft": this.first_tick,
+			"p": []
+		};
+		var i, len, p;
+		var arr = o["p"];
+		for (i = 0, len = this.particles.length; i < len; i++)
+		{
+			p = this.particles[i];
+			arr.push([p.x, p.y, p.speed, p.angle, p.opacity, p.grow, p.size, p.gs, p.age]);
+		}
+		return o;
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+		this.rate = o["r"];
+		this.spraycone = o["sc"];
+		this.spraytype = o["st"];
+		this.spraying = o["s"];
+		this.initspeed = o["isp"];
+		this.initsize = o["isz"];
+		this.initopacity = o["io"];
+		this.growrate = o["gr"];
+		this.xrandom = o["xr"];
+		this.yrandom = o["yr"];
+		this.speedrandom = o["spr"];
+		this.sizerandom = o["szr"];
+		this.growrandom = o["grnd"];
+		this.acc = o["acc"];
+		this.g = o["g"];
+		this.lifeanglerandom = o["lar"];
+		this.lifespeedrandom = o["lsr"];
+		this.lifeopacityrandom = o["lor"];
+		this.destroymode = o["dm"];
+		this.timeout = o["to"];
+		this.particleCreateCounter = o["pcc"];
+		this.first_tick = o["ft"];
+		deadparticles.push.apply(deadparticles, this.particles);
+		cr.clearArray(this.particles);
+		var i, len, p, d;
+		var arr = o["p"];
+		for (i = 0, len = arr.length; i < len; i++)
+		{
+			p = this.allocateParticle();
+			d = arr[i];
+			p.x = d[0];
+			p.y = d[1];
+			p.speed = d[2];
+			p.angle = d[3];
+			p.opacity = d[4];
+			p.grow = d[5];
+			p.size = d[6];
+			p.gs = d[7];
+			p.age = d[8];
+		}
+	};
+	instanceProto.onDestroy = function ()
+	{
+		deadparticles.push.apply(deadparticles, this.particles);
+		cr.clearArray(this.particles);
+	};
+	instanceProto.allocateParticle = function ()
+	{
+		var p;
+		if (deadparticles.length)
+		{
+			p = deadparticles.pop();
+			p.owner = this;
+		}
+		else
+			p = new Particle(this);
+		this.particles.push(p);
+		p.active = true;
+		return p;
+	};
+	instanceProto.tick = function()
+	{
+		var dt = this.runtime.getDt(this);
+		var i, len, p, n, j;
+		if (this.spraytype === 0 && this.spraying)
+		{
+			this.particleCreateCounter += dt * this.rate;
+			n = cr.floor(this.particleCreateCounter);
+			this.particleCreateCounter -= n;
+			for (i = 0; i < n; i++)
+			{
+				p = this.allocateParticle();
+				p.init();
+			}
+		}
+		this.particleBoxLeft = this.x;
+		this.particleBoxTop = this.y;
+		this.particleBoxRight = this.x;
+		this.particleBoxBottom = this.y;
+		for (i = 0, j = 0, len = this.particles.length; i < len; i++)
+		{
+			p = this.particles[i];
+			this.particles[j] = p;
+			this.runtime.redraw = true;
+			if (this.spraytype === 1 && this.first_tick)
+				p.init();
+			p.tick(dt);
+			if (!p.active)
+			{
+				deadparticles.push(p);
+				continue;
+			}
+			if (p.left() < this.particleBoxLeft)
+				this.particleBoxLeft = p.left();
+			if (p.right() > this.particleBoxRight)
+				this.particleBoxRight = p.right();
+			if (p.top() < this.particleBoxTop)
+				this.particleBoxTop = p.top();
+			if (p.bottom() > this.particleBoxBottom)
+				this.particleBoxBottom = p.bottom();
+			j++;
+		}
+		cr.truncateArray(this.particles, j);
+		this.set_bbox_changed();
+		this.first_tick = false;
+		if (this.spraytype === 1 && this.particles.length === 0)
+			this.runtime.DestroyInstance(this);
+	};
+	instanceProto.draw = function (ctx)
+	{
+		var i, len, p, layer = this.layer;
+		for (i = 0, len = this.particles.length; i < len; i++)
+		{
+			p = this.particles[i];
+			if (p.right() >= layer.viewLeft && p.bottom() >= layer.viewTop && p.left() <= layer.viewRight && p.top() <= layer.viewBottom)
+			{
+				p.draw(ctx);
+			}
+		}
+	};
+	instanceProto.drawGL = function (glw)
+	{
+		this.particlescale = this.layer.getScale();
+		glw.setTexture(this.type.webGL_texture);
+		var i, len, p, layer = this.layer;
+		for (i = 0, len = this.particles.length; i < len; i++)
+		{
+			p = this.particles[i];
+			if (p.right() >= layer.viewLeft && p.bottom() >= layer.viewTop && p.left() <= layer.viewRight && p.top() <= layer.viewBottom)
+			{
+				p.drawGL(glw);
+			}
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.IsSpraying = function ()
+	{
+		return this.spraying;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetSpraying = function (set_)
+	{
+		this.spraying = (set_ !== 0);
+	};
+	Acts.prototype.SetEffect = function (effect)
+	{
+		this.blend_mode = effect;
+		this.compositeOp = cr.effectToCompositeOp(effect);
+		cr.setGLBlend(this, effect, this.runtime.gl);
+		this.runtime.redraw = true;
+	};
+	Acts.prototype.SetRate = function (x)
+	{
+		this.rate = x;
+		var diff, i;
+		if (this.spraytype === 1 && this.first_tick)
+		{
+			if (x < this.particles.length)
+			{
+				diff = this.particles.length - x;
+				for (i = 0; i < diff; i++)
+					deadparticles.push(this.particles.pop());
+			}
+			else if (x > this.particles.length)
+			{
+				diff = x - this.particles.length;
+				for (i = 0; i < diff; i++)
+					this.allocateParticle().opacity = 0;
+			}
+		}
+	};
+	Acts.prototype.SetSprayCone = function (x)
+	{
+		this.spraycone = cr.to_radians(x);
+	};
+	Acts.prototype.SetInitSpeed = function (x)
+	{
+		this.initspeed = x;
+	};
+	Acts.prototype.SetInitSize = function (x)
+	{
+		this.initsize = x;
+	};
+	Acts.prototype.SetInitOpacity = function (x)
+	{
+		this.initopacity = x / 100;
+	};
+	Acts.prototype.SetGrowRate = function (x)
+	{
+		this.growrate = x;
+	};
+	Acts.prototype.SetXRandomiser = function (x)
+	{
+		this.xrandom = x;
+	};
+	Acts.prototype.SetYRandomiser = function (x)
+	{
+		this.yrandom = x;
+	};
+	Acts.prototype.SetSpeedRandomiser = function (x)
+	{
+		this.speedrandom = x;
+	};
+	Acts.prototype.SetSizeRandomiser = function (x)
+	{
+		this.sizerandom = x;
+	};
+	Acts.prototype.SetGrowRateRandomiser = function (x)
+	{
+		this.growrandom = x;
+	};
+	Acts.prototype.SetParticleAcc = function (x)
+	{
+		this.acc = x;
+	};
+	Acts.prototype.SetGravity = function (x)
+	{
+		this.g = x;
+	};
+	Acts.prototype.SetAngleRandomiser = function (x)
+	{
+		this.lifeanglerandom = x;
+	};
+	Acts.prototype.SetLifeSpeedRandomiser = function (x)
+	{
+		this.lifespeedrandom = x;
+	};
+	Acts.prototype.SetOpacityRandomiser = function (x)
+	{
+		this.lifeopacityrandom = x;
+	};
+	Acts.prototype.SetTimeout = function (x)
+	{
+		this.timeout = x;
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.ParticleCount = function (ret)
+	{
+		ret.set_int(this.particles.length);
+	};
+	Exps.prototype.Rate = function (ret)
+	{
+		ret.set_float(this.rate);
+	};
+	Exps.prototype.SprayCone = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.spraycone));
+	};
+	Exps.prototype.InitSpeed = function (ret)
+	{
+		ret.set_float(this.initspeed);
+	};
+	Exps.prototype.InitSize = function (ret)
+	{
+		ret.set_float(this.initsize);
+	};
+	Exps.prototype.InitOpacity = function (ret)
+	{
+		ret.set_float(this.initopacity * 100);
+	};
+	Exps.prototype.InitGrowRate = function (ret)
+	{
+		ret.set_float(this.growrate);
+	};
+	Exps.prototype.XRandom = function (ret)
+	{
+		ret.set_float(this.xrandom);
+	};
+	Exps.prototype.YRandom = function (ret)
+	{
+		ret.set_float(this.yrandom);
+	};
+	Exps.prototype.InitSpeedRandom = function (ret)
+	{
+		ret.set_float(this.speedrandom);
+	};
+	Exps.prototype.InitSizeRandom = function (ret)
+	{
+		ret.set_float(this.sizerandom);
+	};
+	Exps.prototype.InitGrowRandom = function (ret)
+	{
+		ret.set_float(this.growrandom);
+	};
+	Exps.prototype.ParticleAcceleration = function (ret)
+	{
+		ret.set_float(this.acc);
+	};
+	Exps.prototype.Gravity = function (ret)
+	{
+		ret.set_float(this.g);
+	};
+	Exps.prototype.ParticleAngleRandom = function (ret)
+	{
+		ret.set_float(this.lifeanglerandom);
+	};
+	Exps.prototype.ParticleSpeedRandom = function (ret)
+	{
+		ret.set_float(this.lifespeedrandom);
+	};
+	Exps.prototype.ParticleOpacityRandom = function (ret)
+	{
+		ret.set_float(this.lifeopacityrandom);
+	};
+	Exps.prototype.Timeout = function (ret)
+	{
+		ret.set_float(this.timeout);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
 cr.plugins_.Sprite = function(runtime)
 {
 	this.runtime = runtime;
@@ -23212,6 +23793,848 @@ cr.plugins_.TiledBg = function(runtime)
 	Exps.prototype.ImageHeight = function (ret)
 	{
 		ret.set_float(this.texture_img.height);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
+cr.plugins_.TiledSprite = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.TiledSprite.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	function frame_getDataUri()
+	{
+		if (this.datauri.length === 0)
+		{
+			var tmpcanvas = document.createElement("canvas");
+			tmpcanvas.width = this.width;
+			tmpcanvas.height = this.height;
+			var tmpctx = tmpcanvas.getContext("2d");
+			if (this.spritesheeted)
+			{
+				tmpctx.drawImage(this.texture_img, this.offx, this.offy, this.width, this.height,
+										 0, 0, this.width, this.height);
+			}
+			else
+			{
+				tmpctx.drawImage(this.texture_img, 0, 0, this.width, this.height);
+			}
+			this.datauri = tmpcanvas.toDataURL("image/png");
+		}
+		return this.datauri;
+	};
+	typeProto.onCreate = function()
+	{
+		if (this.is_family)
+			return;
+		this.pattern = null;
+		this.webGL_texture = null;
+		var i, leni, j, lenj;
+		var anim, frame, animobj, frameobj, wt, uv;
+		for (i = 0, leni = this.animations.length; i < leni; i++)
+		{
+			anim = this.animations[i];
+			animobj = {};
+			animobj.name = anim[0];
+			animobj.speed = anim[1];
+			animobj.loop = anim[2];
+			animobj.repeatcount = anim[3];
+			animobj.repeatto = anim[4];
+			animobj.pingpong = anim[5];
+			animobj.sid = anim[6];
+			animobj.frames = [];
+			for (j = 0, lenj = anim[7].length; j < lenj; j++)
+			{
+				frame = anim[7][j];
+				frameobj = {};
+				frameobj.texture_file = frame[0];
+				frameobj.texture_filesize = frame[1];
+				frameobj.offx = frame[2];
+				frameobj.offy = frame[3];
+				frameobj.width = frame[4];
+				frameobj.height = frame[5];
+				frameobj.duration = frame[6];
+				frameobj.hotspotX = this.hotspot_x;
+				frameobj.hotspotY = this.hotspot_y;
+				frameobj.image_points = frame[9];
+				frameobj.poly_pts = frame[10];
+				frameobj.pixelformat = frame[11];
+				frameobj.spritesheeted = (frameobj.width !== 0);
+				frameobj.datauri = "";		// generated on demand and cached
+				frameobj.getDataUri = frame_getDataUri;
+				uv = {};
+				uv.left = 0;
+				uv.top = 0;
+				uv.right = 1;
+				uv.bottom = 1;
+				frameobj.sheetTex = uv;
+				frameobj.webGL_texture = null;
+				wt = this.runtime.findWaitingTexture(frame[0]);
+				if (wt)
+				{
+					frameobj.texture_img = wt;
+				}
+				else
+				{
+					frameobj.texture_img = new Image();
+					frameobj.texture_img.src = frame[0];
+					frameobj.texture_img.cr_src = frame[0];
+					frameobj.texture_img.cr_filesize = frame[1];
+					frameobj.texture_img.c2webGL_texture = null;
+					this.runtime.wait_for_textures.push(frameobj.texture_img);
+				}
+				cr.seal(frameobj);
+				animobj.frames.push(frameobj);
+			}
+			cr.seal(animobj);
+			this.animations[i] = animobj;		// swap array data for object
+		}
+	};
+	typeProto.updateAllCurrentTexture = function ()
+	{
+		var i, len, inst;
+		for (i = 0, len = this.instances.length; i < len; i++)
+		{
+			inst = this.instances[i];
+			inst.curWebGLTexture = inst.curFrame.webGL_texture;
+		}
+	};
+	typeProto.onLostWebGLContext = function ()
+	{
+		if (this.is_family)
+			return;
+		var i, leni, j, lenj;
+		var anim, frame, inst;
+		for (i = 0, leni = this.animations.length; i < leni; i++)
+		{
+			anim = this.animations[i];
+			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
+			{
+				frame = anim.frames[j];
+				frame.texture_img.c2webGL_texture = null;
+				frame.webGL_texture = null;
+			}
+		}
+	};
+	typeProto.onRestoreWebGLContext = function ()
+	{
+		if (this.is_family || !this.instances.length)
+			return;
+		var i, leni, j, lenj;
+		var anim, frame, inst;
+		for (i = 0, leni = this.animations.length; i < leni; i++)
+		{
+			anim = this.animations[i];
+			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
+			{
+				frame = anim.frames[j];
+				if (!frame.texture_img.c2webGL_texture)
+				{
+					frame.texture_img.c2webGL_texture = this.runtime.glwrap.loadTexture(frame.texture_img, true, this.runtime.linearSampling, frame.pixelformat);
+				}
+				frame.webGL_texture = frame.texture_img.c2webGL_texture;
+			}
+		}
+		for (i = 0, leni = this.instances.length; i < leni; i++)
+		{
+			inst = this.instances[i];
+			inst.curWebGLTexture = inst.curFrame.webGL_texture;
+		}
+	};
+	var all_my_textures = [];
+	typeProto.unloadTextures = function ()
+	{
+		if (this.is_family || this.instances.length)
+			return;
+		var isWebGL = !!this.runtime.glwrap;
+		var i, leni, j, lenj, k;
+		var anim, frame, inst, o;
+		all_my_textures.length = 0;
+		for (i = 0, leni = this.animations.length; i < leni; i++)
+		{
+			anim = this.animations[i];
+			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
+			{
+				frame = anim.frames[j];
+				o = (isWebGL ? frame.texture_img.c2webGL_texture : frame.texture_img);
+				if (!o)
+					continue;
+				k = all_my_textures.indexOf(o);
+				if (k === -1)
+					all_my_textures.push(o);
+				frame.texture_img.c2webGL_texture = null;
+				frame.webGL_texture = null;
+			}
+		}
+		for (i = 0, leni = all_my_textures.length; i < leni; i++)
+		{
+			o = all_my_textures[i];
+			if (isWebGL)
+				this.runtime.glwrap.deleteTexture(o);
+			else if (o["hintUnload"])
+				o["hintUnload"]();
+		}
+		all_my_textures.length = 0;
+	};
+	var already_drawn_images = [];
+	typeProto.preloadCanvas2D = function (ctx)
+	{
+		var i, leni, j, lenj;
+		var anim, frameimg;
+		already_drawn_images.length = 0;
+		for (i = 0, leni = this.animations.length; i < leni; i++)
+		{
+			anim = this.animations[i];
+			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
+			{
+				frameimg = anim.frames[j].texture_img;
+				if (already_drawn_images.indexOf(frameimg) !== -1)
+					continue;
+				ctx.drawImage(frameimg, 0, 0);
+				already_drawn_images.push(frameimg);
+			}
+		}
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+        this.hotspot_x = this.hotspotX;
+        this.hotspot_y = this.hotspotY;
+		this.visible = (this.properties[0] === 0);	// 0=visible, 1=invisible
+		this.rcTex = new cr.rect(0, 0, 0, 0);
+		this.isTicking = false;
+		this.inAnimTrigger = false;
+		this.has_own_texture = false;										// true if a texture loaded in from URL
+		this.texture_img = this.type.texture;
+		if (!(this.type.animations.length === 1 && this.type.animations[0].frames.length === 1) && this.type.animations[0].speed !== 0)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
+		this.cur_animation = this.type.animations[0];
+		this.cur_frame = this.properties[1];
+		if (this.cur_frame < 0)
+			this.cur_frame = 0;
+		if (this.cur_frame >= this.cur_animation.frames.length)
+			this.cur_frame = this.cur_animation.frames.length - 1;
+		if (this.cur_frame !== 0)
+		{
+			var curanimframe = this.cur_animation.frames[this.cur_frame];
+			this.hotspotX = this.hotspot_x;
+			this.hotspotY = this.hotspot_y;
+		}
+		this.cur_anim_speed = this.type.animations[0].speed;
+		this.frameStart = this.getNowTime();
+		this.animPlaying = true;
+		this.animRepeats = 0;
+		this.animForwards = true;
+		this.animTriggerName = "";
+		this.changeAnimName = "";
+		this.changeAnimFrom = 0;
+		this.changeAnimFrame = -1;
+		var i, leni, j, lenj;
+		var anim, frame, uv, maintex;
+		for (i = 0, leni = this.type.animations.length; i < leni; i++)
+		{
+			anim = this.type.animations[i];
+			for (j = 0, lenj = anim.frames.length; j < lenj; j++)
+			{
+				frame = anim.frames[j];
+				if (frame.texture_img["hintLoad"])
+					frame.texture_img["hintLoad"]();
+				if (frame.width === 0)
+				{
+					frame.width = frame.texture_img.width;
+					frame.height = frame.texture_img.height;
+				}
+				if (frame.spritesheeted)
+				{
+					maintex = frame.texture_img;
+					uv = frame.sheetTex;
+					uv.left = frame.offx / maintex.width;
+					uv.top = frame.offy / maintex.height;
+					uv.right = (frame.offx + frame.width) / maintex.width;
+					uv.bottom = (frame.offy + frame.height) / maintex.height;
+					if (frame.offx === 0 && frame.offy === 0 && frame.width === maintex.width && frame.height === maintex.height)
+					{
+						frame.spritesheeted = false;
+					}
+				}
+				if (this.runtime.glwrap)
+				{
+					if (!frame.texture_img.c2webGL_texture)
+					{
+						frame.texture_img.c2webGL_texture = this.runtime.glwrap.loadTexture(frame.texture_img, true, this.runtime.linearSampling, frame.pixelformat);
+					}
+					frame.webGL_texture = frame.texture_img.c2webGL_texture;
+				}
+		else
+		{
+			if (!this.type.pattern)
+				this.type.pattern = this.runtime.ctx.createPattern(frame.texture_img, "repeat");
+			this.pattern = this.type.pattern;
+		}
+			}
+		}
+		this.curFrame = this.cur_animation.frames[this.cur_frame];
+		this.curWebGLTexture = this.curFrame.webGL_texture;
+	};
+	instanceProto.saveToJSON = function ()
+	{
+		var o = {
+			"a": this.cur_animation.sid,
+			"f": this.cur_frame,
+			"cas": this.cur_anim_speed,
+			"fs": this.frameStart,
+			"ar": this.animRepeats
+		};
+		if (!this.animPlaying)
+			o["ap"] = this.animPlaying;
+		if (!this.animForwards)
+			o["af"] = this.animForwards;
+		return o;
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+		var anim = this.getAnimationBySid(o["a"]);
+		if (anim)
+			this.cur_animation = anim;
+		this.cur_frame = o["f"];
+		if (this.cur_frame < 0)
+			this.cur_frame = 0;
+		if (this.cur_frame >= this.cur_animation.frames.length)
+			this.cur_frame = this.cur_animation.frames.length - 1;
+		this.cur_anim_speed = o["cas"];
+		this.frameStart = o["fs"];
+		this.animRepeats = o["ar"];
+		this.animPlaying = o.hasOwnProperty("ap") ? o["ap"] : true;
+		this.animForwards = o.hasOwnProperty("af") ? o["af"] : true;
+		this.curFrame = this.cur_animation.frames[this.cur_frame];
+		this.curWebGLTexture = this.curFrame.webGL_texture;
+		this.hotspotX = this.hotspot_x;
+		this.hotspotY = this.hotspot_y;
+	};
+	instanceProto.animationFinish = function (reverse)
+	{
+		this.cur_frame = reverse ? 0 : this.cur_animation.frames.length - 1;
+		this.animPlaying = false;
+		this.animTriggerName = this.cur_animation.name;
+		this.inAnimTrigger = true;
+		this.runtime.trigger(cr.plugins_.TiledSprite.prototype.cnds.OnAnyAnimFinished, this);
+		this.runtime.trigger(cr.plugins_.TiledSprite.prototype.cnds.OnAnimFinished, this);
+		this.inAnimTrigger = false;
+		this.animRepeats = 0;
+	};
+	instanceProto.getNowTime = function()
+	{
+		return (Date.now() - this.runtime.start_time) / 1000.0;
+	};
+	instanceProto.tick = function()
+	{
+		if (this.changeAnimName.length)
+			this.doChangeAnim();
+		if (this.changeAnimFrame >= 0)
+			this.doChangeAnimFrame();
+		var now = this.getNowTime();
+		var cur_animation = this.cur_animation;
+		var prev_frame = cur_animation.frames[this.cur_frame];
+		var next_frame;
+		var cur_frame_time = prev_frame.duration / this.cur_anim_speed;
+		var cur_timescale = this.runtime.timescale;
+		if (this.my_timescale !== -1.0)
+			cur_timescale = this.my_timescale;
+		cur_frame_time /= (cur_timescale === 0 ? 0.000000001 : cur_timescale);
+		if (this.animPlaying && now >= this.frameStart + cur_frame_time)
+		{
+			if (this.animForwards)
+			{
+				this.cur_frame++;
+			}
+			else
+			{
+				this.cur_frame--;
+			}
+			this.frameStart += cur_frame_time;
+			if (this.cur_frame >= cur_animation.frames.length)
+			{
+				if (cur_animation.pingpong)
+				{
+					this.animForwards = false;
+					this.cur_frame = cur_animation.frames.length - 2;
+				}
+				else if (cur_animation.loop)
+				{
+					this.cur_frame = cur_animation.repeatto;
+				}
+				else
+				{
+					this.animRepeats++;
+					if (this.animRepeats >= cur_animation.repeatcount)
+					{
+						this.animationFinish(false);
+					}
+					else
+					{
+						this.cur_frame = cur_animation.repeatto;
+					}
+				}
+			}
+			if (this.cur_frame < 0)
+			{
+				if (cur_animation.pingpong)
+				{
+					this.cur_frame = 1;
+					this.animForwards = true;
+					if (!cur_animation.loop)
+					{
+						this.animRepeats++;
+						if (this.animRepeats >= cur_animation.repeatcount)
+						{
+							this.animationFinish(true);
+						}
+					}
+				}
+				else
+				{
+					if (cur_animation.loop)
+					{
+						this.cur_frame = cur_animation.repeatto;
+					}
+					else
+					{
+						this.animRepeats++;
+						if (this.animRepeats >= cur_animation.repeatcount)
+						{
+							this.animationFinish(true);
+						}
+						else
+						{
+							this.cur_frame = cur_animation.repeatto;
+						}
+					}
+				}
+			}
+			if (this.cur_frame < 0)
+				this.cur_frame = 0;
+			else if (this.cur_frame >= cur_animation.frames.length)
+				this.cur_frame = cur_animation.frames.length - 1;
+			if (now > this.frameStart + ((cur_animation.frames[this.cur_frame].duration / this.cur_anim_speed) / (cur_timescale === 0 ? 0.000000001 : cur_timescale)))
+			{
+				this.frameStart = now;
+			}
+			next_frame = cur_animation.frames[this.cur_frame];
+			this.OnFrameChanged(prev_frame, next_frame);
+			this.runtime.redraw = true;
+		}
+	};
+	instanceProto.getAnimationByName = function (name_)
+	{
+		var i, len, a, lowername = name_.toLowerCase();
+		for (i = 0, len = this.type.animations.length; i < len; i++)
+		{
+			a = this.type.animations[i];
+			if (a.name.toLowerCase() === lowername)
+				return a;
+		}
+		return null;
+	};
+	instanceProto.getAnimationBySid = function (sid_)
+	{
+		var i, len, a;
+		for (i = 0, len = this.type.animations.length; i < len; i++)
+		{
+			a = this.type.animations[i];
+			if (a.sid === sid_)
+				return a;
+		}
+		return null;
+	};
+	instanceProto.doChangeAnim = function ()
+	{
+		var prev_frame = this.cur_animation.frames[this.cur_frame];
+		var anim = this.getAnimationByName(this.changeAnimName);
+		this.changeAnimName = "";
+		if (!anim)
+			return;
+		if (anim.name.toLowerCase() === this.cur_animation.name.toLowerCase() && this.animPlaying)
+			return;
+		this.cur_animation = anim;
+		this.cur_anim_speed = anim.speed;
+		if (this.cur_frame < 0)
+			this.cur_frame = 0;
+		if (this.cur_frame >= this.cur_animation.frames.length)
+			this.cur_frame = this.cur_animation.frames.length - 1;
+		if (this.changeAnimFrom === 1)
+			this.cur_frame = 0;
+		this.animPlaying = true;
+		this.frameStart = this.getNowTime();
+		this.animForwards = true;
+		this.OnFrameChanged(prev_frame, this.cur_animation.frames[this.cur_frame]);
+		this.runtime.redraw = true;
+	};
+	instanceProto.doChangeAnimFrame = function ()
+	{
+		var prev_frame = this.cur_animation.frames[this.cur_frame];
+		var prev_frame_number = this.cur_frame;
+		this.cur_frame = cr.floor(this.changeAnimFrame);
+		if (this.cur_frame < 0)
+			this.cur_frame = 0;
+		if (this.cur_frame >= this.cur_animation.frames.length)
+			this.cur_frame = this.cur_animation.frames.length - 1;
+		if (prev_frame_number !== this.cur_frame)
+		{
+			this.OnFrameChanged(prev_frame, this.cur_animation.frames[this.cur_frame]);
+			this.frameStart = this.getNowTime();
+			this.runtime.redraw = true;
+		}
+		this.changeAnimFrame = -1;
+	};
+	instanceProto.OnFrameChanged = function (prev_frame, next_frame)
+	{
+		var oldw = prev_frame.width;
+		var oldh = prev_frame.height;
+		var neww = next_frame.width;
+		var newh = next_frame.height;
+		if (oldw != neww)
+			this.width *= (neww / oldw);
+		if (oldh != newh)
+			this.height *= (newh / oldh);
+		this.hotspotX = this.hotspot_x;
+		this.hotspotY = this.hotspot_y;
+		this.set_bbox_changed();
+		this.curFrame = next_frame;
+		this.curWebGLTexture = next_frame.webGL_texture;
+		var i, len, b;
+		for (i = 0, len = this.behavior_insts.length; i < len; i++)
+		{
+			b = this.behavior_insts[i];
+			if (b.onSpriteFrameChanged)
+				b.onSpriteFrameChanged(prev_frame, next_frame);
+		}
+		this.runtime.trigger(cr.plugins_.TiledSprite.prototype.cnds.OnFrameChanged, this);
+	};
+	instanceProto.draw = function(ctx)
+	{
+		ctx.globalAlpha = this.opacity;
+		ctx.save();
+		ctx.fillStyle = this.pattern;
+		var cur_frame = this.curFrame;
+		var spritesheeted = cur_frame.spritesheeted;
+		var cur_image = cur_frame.texture_img;
+		var myx = this.x;
+		var myy = this.y;
+		var w = this.width;
+		var h = this.height;
+		if (this.angle === 0 && w >= 0 && h >= 0)
+		{
+			myx -= this.hotspot_x * w;
+			myy -= this.hotspot_y * h;
+			if (this.runtime.pixel_rounding)
+			{
+				myx = (myx + 0.5) | 0;
+				myy = (myy + 0.5) | 0;
+			}
+			if (spritesheeted)
+			{
+				ctx.drawImage(cur_image, cur_frame.offx, cur_frame.offy, cur_frame.width, cur_frame.height,
+										 myx, myy, w, h);
+			}
+			else
+			{
+				ctx.drawImage(cur_image, myx, myy, w, h);
+			}
+		}
+		else
+		{
+			if (this.runtime.pixel_rounding)
+			{
+				myx = (myx + 0.5) | 0;
+				myy = (myy + 0.5) | 0;
+			}
+			ctx.save();
+			var widthfactor = w > 0 ? 1 : -1;
+			var heightfactor = h > 0 ? 1 : -1;
+			ctx.translate(myx, myy);
+			if (widthfactor !== 1 || heightfactor !== 1)
+				ctx.scale(widthfactor, heightfactor);
+			ctx.rotate(this.angle * widthfactor * heightfactor);
+			var drawx = 0 - (this.hotspot_x * cr.abs(w))
+			var drawy = 0 - (this.hotspot_y * cr.abs(h));
+			if (spritesheeted)
+			{
+				ctx.drawImage(cur_image, cur_frame.offx, cur_frame.offy, cur_frame.width, cur_frame.height,
+										 drawx, drawy, cr.abs(w), cr.abs(h));
+			}
+			else
+			{
+				ctx.drawImage(cur_image, drawx, drawy, cr.abs(w), cr.abs(h));
+			}
+			ctx.restore();
+		}
+	};
+	instanceProto.drawGL = function(glw)
+	{
+		glw.setTexture(this.curWebGLTexture);
+		glw.setOpacity(this.opacity);
+		var cur_frame = this.curFrame;
+		var rcTex = this.rcTex;
+		rcTex.right = this.width / this.cur_animation.frames[this.cur_frame].texture_img.width;
+		rcTex.bottom = this.height / this.cur_animation.frames[this.cur_frame].texture_img.height;
+		var q = this.bquad;
+		if (this.runtime.pixel_rounding)
+		{
+			var ox = ((this.x + 0.5) | 0) - this.x;
+			var oy = ((this.y + 0.5) | 0) - this.y;
+			glw.quadTex(q.tlx + ox, q.tly + oy, q.trx + ox, q.try_ + oy, q.brx + ox, q.bry + oy, q.blx + ox, q.bly + oy, rcTex);
+		}
+		else
+			glw.quadTex(q.tlx, q.tly, q.trx, q.try_, q.brx, q.bry, q.blx, q.bly, rcTex);
+	};
+	instanceProto.getImagePointIndexByName = function(name_)
+	{
+		var cur_frame = this.curFrame;
+		var i, len;
+		for (i = 0, len = cur_frame.image_points.length; i < len; i++)
+		{
+			if (name_.toLowerCase() === cur_frame.image_points[i][0].toLowerCase())
+				return i;
+		}
+		return -1;
+	};
+	instanceProto.getImagePoint = function(imgpt, getX)
+	{
+		var cur_frame = this.curFrame;
+		var image_points = cur_frame.image_points;
+		var index;
+		if (cr.is_string(imgpt))
+			index = this.getImagePointIndexByName(imgpt);
+		else
+			index = imgpt - 1;	// 0 is origin
+		index = cr.floor(index);
+		if (index < 0 || index >= image_points.length)
+			return getX ? this.x : this.y;	// return origin
+		var x = (image_points[index][1] - this.hotspot_x) * this.width;
+		var y = image_points[index][2];
+		y = (y - this.hotspot_y) * this.height;
+		var cosa = Math.cos(this.angle);
+		var sina = Math.sin(this.angle);
+		var x_temp = (x * cosa) - (y * sina);
+		y = (y * cosa) + (x * sina);
+		x = x_temp;
+		x += this.x;
+		y += this.y;
+		return getX ? x : y;
+	};
+	function Cnds() {};
+	Cnds.prototype.IsAnimPlaying = function (animname)
+	{
+		if (this.changeAnimName.length)
+			return this.changeAnimName.toLowerCase() === animname.toLowerCase();
+		else
+			return this.cur_animation.name.toLowerCase() === animname.toLowerCase();
+	};
+	Cnds.prototype.CompareFrame = function (cmp, framenum)
+	{
+		return cr.do_cmp(this.cur_frame, cmp, framenum);
+	};
+	Cnds.prototype.OnAnimFinished = function (animname)
+	{
+		return this.animTriggerName.toLowerCase() === animname.toLowerCase();
+	};
+	Cnds.prototype.OnAnyAnimFinished = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnFrameChanged = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsMirrored = function ()
+	{
+		return this.width < 0;
+	};
+	Cnds.prototype.IsFlipped = function ()
+	{
+		return this.height < 0;
+	};
+	Cnds.prototype.OnURLLoaded = function ()
+	{
+		return true;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetEffect = function (effect)
+	{
+		this.compositeOp = cr.effectToCompositeOp(effect);
+		cr.setGLBlend(this, effect, this.runtime.gl);
+		this.runtime.redraw = true;
+	};
+	Acts.prototype.StopAnim = function ()
+	{
+		this.animPlaying = false;
+	};
+	Acts.prototype.StartAnim = function (from)
+	{
+		this.animPlaying = true;
+		this.frameStart = this.getNowTime();
+		if (from === 1 && this.cur_frame !== 0)
+		{
+			this.changeAnimFrame = 0;
+			if (!this.inAnimTrigger)
+				this.doChangeAnimFrame();
+		}
+		if (!this.isTicking)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
+	};
+	Acts.prototype.SetAnim = function (animname, from)
+	{
+		this.changeAnimName = animname;
+		this.changeAnimFrom = from;
+		if (!this.isTicking)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
+		if (!this.inAnimTrigger)
+			this.doChangeAnim();
+	};
+	Acts.prototype.SetAnimFrame = function (framenumber)
+	{
+		this.changeAnimFrame = framenumber;
+		if (!this.isTicking)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
+		if (!this.inAnimTrigger)
+			this.doChangeAnimFrame();
+	};
+	Acts.prototype.SetAnimSpeed = function (s)
+	{
+		this.cur_anim_speed = cr.abs(s);
+		this.animForwards = (s >= 0);
+		if (!this.isTicking)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
+	};
+	Acts.prototype.SetMirrored = function (m)
+	{
+		var neww = cr.abs(this.width) * (m === 0 ? -1 : 1);
+		if (this.width === neww)
+			return;
+		this.width = neww;
+		this.set_bbox_changed();
+	};
+	Acts.prototype.SetFlipped = function (f)
+	{
+		var newh = cr.abs(this.height) * (f === 0 ? -1 : 1);
+		if (this.height === newh)
+			return;
+		this.height = newh;
+		this.set_bbox_changed();
+	};
+	Acts.prototype.SetScale = function (s)
+	{
+		var cur_frame = this.curFrame;
+		var mirror_factor = (this.width < 0 ? -1 : 1);
+		var flip_factor = (this.height < 0 ? -1 : 1);
+		var new_width = cur_frame.width * s * mirror_factor;
+		var new_height = cur_frame.height * s * flip_factor;
+		if (this.width !== new_width || this.height !== new_height)
+		{
+			this.width = new_width;
+			this.height = new_height;
+			this.set_bbox_changed();
+		}
+	};
+	Acts.prototype.LoadURL = function (url_, resize_)
+	{
+		var img = new Image();
+		var self = this;
+		var curFrame_ = this.curFrame;
+		img.onload = function ()
+		{
+			if (curFrame_.texture_img.src === img.src)
+			{
+				if (self.runtime.glwrap && self.curFrame === curFrame_)
+					self.curWebGLTexture = curFrame_.webGL_texture;
+				self.runtime.redraw = true;
+				self.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnURLLoaded, self);
+				return;
+			}
+			curFrame_.texture_img = img;
+			curFrame_.offx = 0;
+			curFrame_.offy = 0;
+			curFrame_.width = img.width;
+			curFrame_.height = img.height;
+			curFrame_.spritesheeted = false;
+			curFrame_.datauri = "";
+			if (self.runtime.glwrap)
+			{
+				if (curFrame_.webGL_texture)
+					self.runtime.glwrap.deleteTexture(curFrame_.webGL_texture);
+				curFrame_.webGL_texture = self.runtime.glwrap.loadTexture(img, false, self.runtime.linearSampling);
+				if (self.curFrame === curFrame_)
+					self.curWebGLTexture = curFrame_.webGL_texture;
+				self.type.updateAllCurrentTexture();
+			}
+			if (resize_ === 0)		// resize to image size
+			{
+				self.width = img.width;
+				self.height = img.height;
+				self.set_bbox_changed();
+			}
+			self.runtime.redraw = true;
+			self.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnURLLoaded, self);
+		};
+		if (url_.substr(0, 5) !== "data:")
+			img.crossOrigin = 'anonymous';
+		img.src = url_;
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.AnimationFrame = function (ret)
+	{
+		ret.set_int(this.cur_frame);
+	};
+	Exps.prototype.AnimationFrameCount = function (ret)
+	{
+		ret.set_int(this.cur_animation.frames.length);
+	};
+	Exps.prototype.AnimationName = function (ret)
+	{
+		ret.set_string(this.cur_animation.name);
+	};
+	Exps.prototype.AnimationSpeed = function (ret)
+	{
+		ret.set_float(this.cur_anim_speed);
+	};
+	Exps.prototype.ImageWidth = function (ret)
+	{
+		ret.set_float(this.curFrame.width);
+	};
+	Exps.prototype.ImageHeight = function (ret)
+	{
+		ret.set_float(this.curFrame.height);
 	};
 	pluginProto.exps = new Exps();
 }());
@@ -26902,6 +28325,166 @@ cr.plugins_.aekiro_proui2 = function(runtime)
 }());
 ;
 ;
+cr.behaviors.Anchor = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Anchor.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.anch_left = this.properties[0];		// 0 = left, 1 = right, 2 = none
+		this.anch_top = this.properties[1];			// 0 = top, 1 = bottom, 2 = none
+		this.anch_right = this.properties[2];		// 0 = none, 1 = right
+		this.anch_bottom = this.properties[3];		// 0 = none, 1 = bottom
+		this.inst.update_bbox();
+		this.xleft = this.inst.bbox.left;
+		this.ytop = this.inst.bbox.top;
+		this.xright = this.runtime.original_width - this.inst.bbox.left;
+		this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+		this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+		this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+		this.enabled = (this.properties[4] !== 0);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"xleft": this.xleft,
+			"ytop": this.ytop,
+			"xright": this.xright,
+			"ybottom": this.ybottom,
+			"rdiff": this.rdiff,
+			"bdiff": this.bdiff,
+			"enabled": this.enabled
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.xleft = o["xleft"];
+		this.ytop = o["ytop"];
+		this.xright = o["xright"];
+		this.ybottom = o["ybottom"];
+		this.rdiff = o["rdiff"];
+		this.bdiff = o["bdiff"];
+		this.enabled = o["enabled"];
+	};
+	behinstProto.tick = function ()
+	{
+		if (!this.enabled)
+			return;
+		var n;
+		var layer = this.inst.layer;
+		var inst = this.inst;
+		var bbox = this.inst.bbox;
+		if (this.anch_left === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewLeft + this.xleft) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_left === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.xright) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_top === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewTop + this.ytop) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_top === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.ybottom) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_right === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.rdiff) - bbox.right;
+			if (n !== 0)
+			{
+				inst.width += n;
+				if (inst.width < 0)
+					inst.width = 0;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_bottom === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.bdiff) - bbox.bottom;
+			if (n !== 0)
+			{
+				inst.height += n;
+				if (inst.height < 0)
+					inst.height = 0;
+				inst.set_bbox_changed();
+			}
+		}
+	};
+	function Cnds() {};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetEnabled = function (e)
+	{
+		if (this.enabled && e === 0)
+			this.enabled = false;
+		else if (!this.enabled && e !== 0)
+		{
+			this.inst.update_bbox();
+			this.xleft = this.inst.bbox.left;
+			this.ytop = this.inst.bbox.top;
+			this.xright = this.runtime.original_width - this.inst.bbox.left;
+			this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+			this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+			this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+			this.enabled = true;
+		}
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
 cr.behaviors.Bullet = function(runtime)
 {
 	this.runtime = runtime;
@@ -29459,6 +31042,336 @@ cr.behaviors.TR_AnimatedCounter = function(runtime)
 }());
 ;
 ;
+cr.behaviors.TR_Level = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.TR_Level.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+        this.lvl = {
+            baseExp: this.properties[1],
+            expScale: this.properties[2],
+            maxLevel: this.properties[3],
+            isDelevelingAllowed: !!this.properties[4],
+            expScaleMode: this.properties[5],
+            customExpScale: String(this.properties[6]).trim().split(","),
+            currentLevel: 1,
+            totalExp: 0,
+            levelExp: 0,
+            levelExpPool: 0
+        };
+        this.lvl.levelExpPool = this.getLevelExpPool(1);
+        this.levelChangeValue = 0;
+	};
+	behinstProto.onDestroy = function ()
+	{
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+            "lvl": JSON.stringify(this.lvl),
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+        this.lvl = JSON.parse(o["lvl"]);
+	};
+	behinstProto.tick = function ()
+	{
+	};
+    var EXP_SCALE_MODES = {
+        PROGRESSIVE: 0,
+        CONSTANT: 1,
+        CUSTOM: 2
+    };
+    behinstProto.cleanArray = function(_array)
+    {
+        var i, j = 0, len = _array.length;
+        for (i = 0; i < len; ++i)
+        {
+            if (_array[i] === null) continue;
+            _array[j] = _array[i];
+            ++j;
+        }
+        _array.length = j;
+    };
+    behinstProto.getLevelExpPool = function(level_)
+    {
+        var levelExpPool;
+        switch(this.lvl.expScaleMode)
+        {
+            case EXP_SCALE_MODES.PROGRESSIVE:
+                levelExpPool = this.lvl.baseExp * Math.pow(this.lvl.expScale, (level_ - 1));
+                break;
+            case EXP_SCALE_MODES.CONSTANT:
+                levelExpPool = this.lvl.baseExp + this.lvl.expScale * (level_ - 1);
+                break;
+            case EXP_SCALE_MODES.CUSTOM:
+                levelExpPool = this.lvl.customExpScale[level_ - 1] || this.lvl.customExpScale[this.lvl.customExpScale.length - 1];
+                break;
+        }
+        return Math.floor(levelExpPool);
+    };
+    behinstProto.addExperience = function(experience_)
+    {
+        if(this.lvl.currentLevel === this.lvl.maxLevel) return;
+        var levelChangeQty = 0;
+        while(experience_ > 0)
+        {
+            var missingExp = this.lvl.levelExpPool - this.lvl.levelExp;
+            if(missingExp > experience_)
+            {
+                this.lvl.levelExp += experience_;
+                this.lvl.totalExp += experience_;
+                experience_ = 0;
+            }
+            else
+            {
+                this.lvl.totalExp += missingExp;
+                experience_ -= missingExp;
+                ++levelChangeQty;
+                ++this.lvl.currentLevel;
+                this.lvl.levelExp = 0;
+                this.lvl.levelExpPool = this.getLevelExpPool(this.lvl.currentLevel);
+                this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnLevelUp, this.inst);
+                if(this.lvl.currentLevel === this.lvl.maxLevel) break;
+            }
+        }
+        if(levelChangeQty > 0)
+        {
+            this.levelChangeValue = levelChangeQty;
+            this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnLevelChange, this.inst);
+            this.levelChangeValue = 0;
+            if(this.lvl.currentLevel === this.lvl.maxLevel)
+            {
+                this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnMaxLevelReached, this.inst);
+            }
+        }
+        this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnExpAdded, this.inst);
+        this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnExpChanged, this.inst);
+    };
+    behinstProto.subtractExperience = function(experience_)
+    {
+        if(this.lvl.totalExp < 1) return;
+        var levelChangeQty = 0;
+        while(experience_ > 0 && this.lvl.totalExp > 0)
+        {
+            if(this.lvl.levelExp >= experience_)
+            {
+                this.lvl.levelExp -= experience_;
+                this.lvl.totalExp -= experience_;
+                experience_ = 0;
+            }
+            else
+            {
+                experience_ -= this.lvl.levelExp;
+                this.lvl.totalExp -= this.lvl.levelExp;
+                this.lvl.levelExp = 0;
+                if(this.lvl.isDelevelingAllowed && this.lvl.currentLevel > 1)
+                {
+                    --levelChangeQty;
+                    --this.lvl.currentLevel;
+                    this.lvl.levelExpPool = this.getLevelExpPool(this.lvl.currentLevel);
+                    this.lvl.levelExp = this.lvl.levelExpPool;
+                    this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnLevelDown, this.inst);
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        if(levelChangeQty < 0)
+        {
+            this.levelChangeValue = levelChangeQty;
+            this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnLevelChange, this.inst);
+            this.levelChangeValue = 0;
+        }
+        this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnExpSubtracted, this.inst);
+        this.runtime.trigger(cr.behaviors.TR_Level.prototype.cnds.OnExpChanged, this.inst);
+    };
+    behinstProto.getTotalExp = function(level_)
+    {
+        if(level_ < 1) return 0;
+        var i, totalExp = 0;
+        for(i = 1; i <= level_; ++i)
+        {
+            totalExp += this.getLevelExpPool(i);
+        }
+        return totalExp;
+    };
+	function Cnds() {};
+    /**
+     * @returns {boolean}
+     */
+	Cnds.prototype.OnLevelUp = function ()
+	{
+		return true;
+	};
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnLevelDown = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnLevelChange = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnExpAdded = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnExpSubtracted = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnExpChanged = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnMaxLevelReached = function ()
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.OnLevelReached = function (level_)
+    {
+        return true;
+    };
+    /**
+     * @returns {boolean}
+     */
+    Cnds.prototype.LevelCompare = function (cmp_, value_)
+    {
+        return cr.do_cmp(this.lvl.currentLevel, cmp_, value_);
+    };
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.AddExperience = function (experience_)
+	{
+        this.addExperience(experience_);
+	};
+    Acts.prototype.SubtractExperience = function (experience_)
+    {
+        this.subtractExperience(experience_);
+    };
+    Acts.prototype.SetExperience = function (experience_)
+    {
+        if(experience_ > this.lvl.totalExp)
+        {
+            this.addExperience(experience_ - this.lvl.totalExp);
+        }
+        else
+        if(experience_ < this.lvl.totalExp)
+        {
+            this.subtractExperience(this.lvl.totalExp - experience_);
+        }
+    };
+	Acts.prototype.SetExperienceScale = function (scale_)
+	{
+        this.lvl.expScale = scale_;
+	};
+    Acts.prototype.SetMaxLevel = function (level_)
+    {
+        this.lvl.maxLevel = level_;
+    };
+    Acts.prototype.LoadFromJSON = function (JSON_)
+    {
+        this.lvl = JSON.parse(JSON_);
+    };
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	/*Exps.prototype.MyExpression = function (ret)	// 'ret' must always be the first parameter - always return the expression's result through it!
+	{
+		ret.set_int(1337);				// return our value
+	};*/
+    Exps.prototype.AsJSON = function (ret)
+    {
+        ret.set_string(JSON.stringify(this.lvl));
+    };
+    Exps.prototype.CurrentLevel = function (ret)
+    {
+        ret.set_int(this.lvl.currentLevel);
+    };
+    Exps.prototype.MaxLevel = function (ret)
+    {
+        ret.set_int(this.lvl.maxLevel);
+    };
+    Exps.prototype.LevelExpValue = function (ret)
+    {
+        ret.set_int(this.lvl.levelExp);
+    };
+    Exps.prototype.LevelExpProgress = function (ret)
+    {
+        ret.set_float(Math.floor((this.lvl.levelExp/this.lvl.levelExpPool) * 100) / 100);
+    };
+    Exps.prototype.LevelExpPool = function (ret)
+    {
+        var level = arguments[1] || this.lvl.currentLevel;
+        var value = level === this.lvl.currentLevel ? this.lvl.levelExpPool : this.getLevelExpPool(level);
+        ret.set_int(value);
+    };
+    Exps.prototype.TotalExp = function (ret)
+    {
+        var value;
+        if(arguments[1])
+        {
+            value = this.getTotalExp(arguments[1]);
+        }
+        else
+        {
+            value = this.lvl.totalExp;
+        }
+        ret.set_int(value);
+    };
+    Exps.prototype.LevelChangeValue = function (ret)
+    {
+        ret.set_int(this.levelChangeValue);
+    };
+	behaviorProto.exps = new Exps();
+}());
+;
+;
 cr.behaviors.TR_Scale = function(runtime)
 {
 	this.runtime = runtime;
@@ -30196,6 +32109,1187 @@ cr.behaviors.destroy = function(runtime)
 			this.runtime.DestroyInstance(this.inst);
 	};
 }());
+var easeOutBounceArray = [];
+var easeInElasticArray = [];
+var easeOutElasticArray = [];
+var easeInOutElasticArray = [];
+var easeInCircle = [];
+var easeOutCircle = [];
+var easeInOutCircle = [];
+var easeInBack = [];
+var easeOutBack = [];
+var easeInOutBack = [];
+var litetween_precision = 10000;
+var updateLimit = 0; //0.0165;
+function easeOutBouncefunc(t) {
+  var b=0.0;
+  var c=1.0;
+  var d=1.0;
+	if ((t/=d) < (1/2.75)) {
+		result = c*(7.5625*t*t) + b;
+	} else if (t < (2/2.75)) {
+		result = c*(7.5625*(t-=(1.5/2.75))*t + .75) + b;
+	} else if (t < (2.5/2.75)) {
+		result = c*(7.5625*(t-=(2.25/2.75))*t + .9375) + b;
+	} else {
+		result = c*(7.5625*(t-=(2.625/2.75))*t + .984375) + b;
+	}
+  return result;
+}
+function integerize(t, d)
+{
+  return Math.round(t/d*litetween_precision);
+}
+function easeFunc(easing, t, b, c, d, flip, param)
+{
+  var ret_ease = 0;
+  switch (easing) {
+	case 0:		// linear
+		ret_ease = c*t/d + b;
+    break;
+	case 1:		// easeInQuad
+		ret_ease = c*(t/=d)*t + b;
+    break;
+	case 2:		// easeOutQuad
+		ret_ease = -c *(t/=d)*(t-2) + b;
+    break;
+	case 3:		// easeInOutQuad
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t + b
+    else
+		  ret_ease = -c/2 * ((--t)*(t-2) - 1) + b;
+    break;
+	case 4:		// easeInCubic
+		ret_ease = c*(t/=d)*t*t + b;
+    break;
+	case 5:		// easeOutCubic
+		ret_ease = c*((t=t/d-1)*t*t + 1) + b;
+    break;
+	case 6:		// easeInOutCubic
+		if ((t/=d/2) < 1)
+			ret_ease = c/2*t*t*t + b
+    else
+		  ret_ease = c/2*((t-=2)*t*t + 2) + b;
+    break;
+	case 7:		// easeInQuart
+		ret_ease = c*(t/=d)*t*t*t + b;
+    break;
+	case 8:		// easeOutQuart
+		ret_ease = -c * ((t=t/d-1)*t*t*t - 1) + b;
+    break;
+	case 9:		// easeInOutQuart
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t*t*t + b
+    else
+		  ret_ease = -c/2 * ((t-=2)*t*t*t - 2) + b;
+    break;
+	case 10:		// easeInQuint
+		ret_ease = c*(t/=d)*t*t*t*t + b;
+    break;
+	case 11:		// easeOutQuint
+		ret_ease = c*((t=t/d-1)*t*t*t*t + 1) + b;
+    break;
+	case 12:		// easeInOutQuint
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t*t*t*t + b
+    else
+		  ret_ease = c/2*((t-=2)*t*t*t*t + 2) + b;
+    break;
+	case 13:		// easeInCircle
+    if (param.optimized) {
+		  ret_ease = easeInCircle[integerize(t,d)];
+    } else {
+      ret_ease = -(Math.sqrt(1-t*t) - 1);
+    }
+    break;
+	case 14:		// easeOutCircle
+    if (param.optimized) {
+  		ret_ease = easeOutCircle[integerize(t,d)];
+    } else {
+      ret_ease = Math.sqrt(1 - ((t-1)*(t-1)));
+    }
+    break;
+	case 15:		// easeInOutCircle
+    if (param.optimized) {
+  		ret_ease = easeInOutCircle[integerize(t,d)];
+    } else {
+  		if ((t/=d/2) < 1) ret_ease = -c/2 * (Math.sqrt(1 - t*t) - 1) + b
+      else ret_ease = c/2 * (Math.sqrt(1 - (t-=2)*t) + 1) + b;
+    }
+    break;
+	case 16:		// easeInBack
+    if (param.optimized) {
+		  ret_ease = easeInBack[integerize(t,d)];
+    } else {
+  		var s = param.s;
+	  	ret_ease = c*(t/=d)*t*((s+1)*t - s) + b;
+    }
+    break;
+	case 17:		// easeOutBack
+    if (param.optimized) {
+		  ret_ease = easeOutBack[integerize(t,d)];
+    } else {
+   		var s = param.s;
+	  	ret_ease = c*((t=t/d-1)*t*((s+1)*t + s) + 1) + b;
+    }
+    break;
+	case 18:		// easeInOutBack
+    if (param.optimized) {
+		  ret_ease = easeInOutBack[integerize(t,d)];
+    } else {
+      var s = param.s
+  		if ((t/=d/2) < 1)
+        ret_ease = c/2*(t*t*(((s*=(1.525))+1)*t - s)) + b
+      else
+  		  ret_ease = c/2*((t-=2)*t*(((s*=(1.525))+1)*t + s) + 2) + b;
+    }
+    break;
+	case 19:	//easeInElastic
+    if (param.optimized) {
+  		ret_ease = easeInElasticArray[integerize(t, d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+      if (t==0) ret_ease = b; if ((t/=d)==1) ret_ease = b+c;
+      if (p==0) p=d*.3;	if (a==0 || a < Math.abs(c)) { a=c; s=p/4; }
+      else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		ret_ease = -(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b;
+    }
+    break;
+	case 20:	//easeOutElastic
+    if (param.optimized) {
+      ret_ease = easeOutElasticArray[integerize(t,d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+  		if (t==0) ret_ease= b;  if ((t/=d)==1) ret_ease= b+c;  if (p == 0) p=d*.3;
+  		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+  		else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		ret_ease= (a*Math.pow(2,-10*t) * Math.sin( (t*d-s)*(2*Math.PI)/p ) + c + b);
+    }
+    break;
+	case 21:	//easeInOutElastic
+    if (param.optimized) {
+      ret_ease = easeInOutElasticArray[integerize(t,d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+  		if (t==0) ret_ease = b;
+  		if ((t/=d/2)==2) ret_ease = b+c;
+  		if (p==0) p=d*(.3*1.5);
+  		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+  		else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		if (t < 1)
+        ret_ease = -.5*(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b
+      else
+  		  ret_ease = a*Math.pow(2,-10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )*.5 + c + b;
+    }
+    break;
+	case 22:	//easeInBounce
+    if (param.optimized) {
+  		ret_ease = c - easeOutBounceArray[integerize(d-t, d)] + b;
+    } else {
+  		ret_ease = c - easeOutBouncefunc(d-t/d) + b;
+    }
+    break;
+	case 23:	//easeOutBounce
+    if (param.optimized) {
+  		ret_ease = easeOutBounceArray[integerize(t, d)];
+    } else {
+  		ret_ease = easeOutBouncefunc(t/d);
+    }
+    break;
+	case 24:	//easeInOutBounce
+    if (param.optimized) {
+  		if (t < d/2)
+        ret_ease = (c - easeOutBounceArray[integerize(d-(t*2), d)] + b) * 0.5 +b;
+  		else
+        ret_ease = easeOutBounceArray[integerize(t*2-d, d)] * .5 + c*.5 + b;
+    } else {
+  		if (t < d/2)
+        ret_ease = (c - easeOutBouncefunc(d-(t*2)) + b) * 0.5 +b;
+  		else
+        ret_ease = easeOutBouncefunc((t*2-d)/d) * .5 + c *.5 + b;
+    }
+    break;
+	case 25:	//easeInSmoothstep
+		var mt = (t/d) / 2;
+		ret_ease = (2*(mt * mt * (3 - 2*mt)));
+    break;
+	case 26:	//easeOutSmoothstep
+		var mt = ((t/d) + 1) / 2;
+		ret_ease = ((2*(mt * mt * (3 - 2*mt))) - 1);
+    break;
+	case 27:	//easeInOutSmoothstep
+		var mt = (t / d);
+		ret_ease = (mt * mt * (3 - 2*mt));
+    break;
+	};
+  if (flip)
+    return (c - b) - ret_ease
+  else
+    return ret_ease;
+};
+(function preCalculateArray() {
+  var d = 1.0;
+  var b = 0.0;
+  var c = 1.0;
+  var result = 0.0;
+  var a = 0.0;
+  var p = 0.0;
+  var t = 0.0;
+  var s = 0.0;
+  for (var ti = 0; ti <= litetween_precision; ti++) {
+    t = ti/litetween_precision;
+  	if ((t/=d) < (1/2.75)) {
+  		result = c*(7.5625*t*t) + b;
+  	} else if (t < (2/2.75)) {
+  		result = c*(7.5625*(t-=(1.5/2.75))*t + .75) + b;
+  	} else if (t < (2.5/2.75)) {
+  		result = c*(7.5625*(t-=(2.25/2.75))*t + .9375) + b;
+  	} else {
+  		result = c*(7.5625*(t-=(2.625/2.75))*t + .984375) + b;
+  	}
+    easeOutBounceArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+    if (t==0) result = b; if ((t/=d)==1) result = b+c;
+    if (p==0) p=d*.3;	if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+    else var s = p/(2*Math.PI) * Math.asin (c/a);
+		result = -(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b;
+    easeInElasticArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+		if (t==0) result= b;  if ((t/=d)==1) result= b+c;  if (p == 0) p=d*.3;
+		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+		else var s = p/(2*Math.PI) * Math.asin (c/a);
+		result= (a*Math.pow(2,-10*t) * Math.sin( (t*d-s)*(2*Math.PI)/p ) + c + b);
+    easeOutElasticArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+		if (t==0) result = b;
+		if ((t/=d/2)==2) result = b+c;
+		if (p==0) p=d*(.3*1.5);
+		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+		else var s = p/(2*Math.PI) * Math.asin (c/a);
+		if (t < 1)
+      result = -.5*(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b
+    else
+		  result = a*Math.pow(2,-10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )*.5 + c + b;
+    easeInOutElasticArray[ti] = result;
+    t = ti/litetween_precision; easeInCircle[ti] = -(Math.sqrt(1-t*t) - 1);
+    t = ti/litetween_precision; easeOutCircle[ti] = Math.sqrt(1 - ((t-1)*(t-1)));
+    t = ti/litetween_precision;
+		if ((t/=d/2) < 1) result = -c/2 * (Math.sqrt(1 - t*t) - 1) + b
+    else result = c/2 * (Math.sqrt(1 - (t-=2)*t) + 1) + b;
+    easeInOutCircle[ti] = result;
+    t = ti/litetween_precision; s = 0;
+		if (s==0) s = 1.70158;
+		result = c*(t/=d)*t*((s+1)*t - s) + b;
+    easeInBack[ti] = result;
+    t = ti/litetween_precision; s = 0;
+		if (s==0) s = 1.70158;
+		result = c*((t=t/d-1)*t*((s+1)*t + s) + 1) + b;
+    easeOutBack[ti] = result;
+    t = ti/litetween_precision; s = 0; if (s==0) s = 1.70158;
+		if ((t/=d/2) < 1)
+      result = c/2*(t*t*(((s*=(1.525))+1)*t - s)) + b
+    else
+		  result = c/2*((t-=2)*t*(((s*=(1.525))+1)*t + s) + 2) + b;
+    easeInOutBack[ti] = result;
+	}
+}());
+var TweenObject = function()
+{
+	var constructor = function (tname, tweened, easefunc, initial, target, duration, enforce)
+	{
+    this.name = tname;
+    this.value = 0;
+    this.setInitial(initial);
+    this.setTarget(target);
+    this.easefunc = easefunc;
+    this.tweened = tweened;
+    this.duration = duration;
+    this.progress = 0;
+    this.state = 0;
+    this.onStart = false;
+    this.onEnd = false;
+    this.onReverseStart = false;
+    this.onReverseEnd = false;
+    this.lastKnownValue = 0;
+    this.lastKnownValue2 = 0;
+    this.enforce = enforce;
+    this.pingpong = 1.0;
+    this.flipEase = false;
+    this.easingparam = [];
+    this.lastState = 1;
+    for (var i=0; i<28; i++) {
+      this.easingparam[i] = {};
+      this.easingparam[i].a = 0.0;
+      this.easingparam[i].p = 0.0;
+      this.easingparam[i].t = 0.0;
+      this.easingparam[i].s = 0.0;
+      this.easingparam[i].optimized = true;
+    }
+	}
+	return constructor;
+}();
+(function () {
+	TweenObject.prototype = {
+	};
+  TweenObject.prototype.flipTarget = function ()
+  {
+    var x1 = this.initialparam1;
+    var x2 = this.initialparam2;
+    this.initialparam1 = this.targetparam1;
+    this.initialparam2 = this.targetparam2;
+    this.targetparam1 = x1;
+    this.targetparam2 = x2;
+    this.lastKnownValue = 0;
+    this.lastKnownValue2 = 0;
+  }
+  TweenObject.prototype.setInitial = function (initial)
+  {
+    this.initialparam1 = parseFloat(initial.split(",")[0]);
+    this.initialparam2 = parseFloat(initial.split(",")[1]);
+		this.lastKnownValue = 0;
+		this.lastKnownValue2 = 0;
+  }
+  TweenObject.prototype.setTarget = function (target)
+  {
+    this.targetparam1 = parseFloat(target.split(",")[0]);
+    this.targetparam2 = parseFloat(target.split(",")[1]);
+    if (isNaN(this.targetparam2)) this.targetparam2 = this.targetparam1;
+  }
+  TweenObject.prototype.OnTick = function(dt)
+  {
+    if (this.state === 0) return -1.0;
+    if (this.state === 1)
+      this.progress += dt;
+    if (this.state === 2)
+      this.progress -= dt;
+    if (this.state === 3) {
+      this.state = 0;
+    }
+    if ((this.state === 4) || (this.state === 6)) {
+      this.progress += dt * this.pingpong;
+    }
+    if (this.state === 5) {
+      this.progress += dt * this.pingpong;
+    }
+    if (this.progress < 0) {
+      this.progress = 0;
+      if (this.state === 4) {
+        this.pingpong = 1;
+      } else if (this.state === 6) {
+        this.pingpong = 1;
+        this.flipEase = false;
+      } else {
+        this.state = 0;
+      }
+      this.onReverseEnd = true;
+      return 0.0;
+    } else if (this.progress > this.duration) {
+      this.progress = this.duration;
+      if (this.state === 4) {
+        this.pingpong = -1;
+      } else if (this.state === 6) {
+        this.pingpong = -1;
+        this.flipEase = true;
+      } else if (this.state === 5) {
+        this.progress = 0.0;
+      } else {
+        this.state = 0;
+      }
+      this.onEnd = true;
+      return 1.0;
+    } else {
+      if (this.flipEase) {
+        var factor = easeFunc(this.easefunc, this.duration - this.progress, 0, 1, this.duration, this.flipEase, this.easingparam[this.easefunc]);
+      } else {
+        var factor = easeFunc(this.easefunc, this.progress, 0, 1, this.duration, this.flipEase, this.easingparam[this.easefunc]);
+      }
+      return factor;
+    }
+  };
+}());
+;
+;
+function trim (str) {
+    return str.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+}
+cr.behaviors.lunarray_LiteTween = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.lunarray_LiteTween.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.i = 0;		// progress
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+    this.playmode = this.properties[0];
+    this.active = (this.playmode == 1) || (this.playmode == 2) || (this.playmode == 3) || (this.playmode == 4);
+		this.tweened = this.properties[1]; // 0=Position|1=Size|2=Width|3=Height|4=Angle|5=Opacity|6=Value only|7=Horizontal|8=Vertical|9=Scale
+		this.easing = this.properties[2];
+		this.target = this.properties[3];
+		this.targetmode = this.properties[4];
+    this.useCurrent = false;
+    if (this.targetmode === 1) this.target = "relative("+this.target+")";
+		this.duration = this.properties[5];
+		this.enforce = (this.properties[6] === 1);
+    this.value = 0;
+    this.tween_list = {};
+    this.addToTweenList("default", this.tweened, this.easing, "current", this.target, this.duration, this.enforce);
+    if (this.properties[0] === 1) this.startTween(0)
+    if (this.properties[0] === 2) this.startTween(2)
+    if (this.properties[0] === 3) this.startTween(3)
+    if (this.properties[0] === 4) this.startTween(4)
+	};
+	behinstProto.parseCurrent = function(tweened, parseText)
+  {
+    if (parseText === undefined) parseText = "current";
+    var parsed = trim(parseText);
+    parseText = trim(parseText);
+    var value = this.value;
+    if (parseText === "current") {
+      switch (tweened) {
+        case 0: parsed = this.inst.x + "," + this.inst.y; break;
+        case 1: parsed = this.inst.width + "," + this.inst.height; break;
+        case 2: parsed = this.inst.width + "," + this.inst.height; break;
+        case 3: parsed = this.inst.width + "," + this.inst.height; break;
+        case 4: parsed = cr.to_degrees(this.inst.angle) + "," + cr.to_degrees(this.inst.angle); break;
+        case 5: parsed = (this.inst.opacity*100) + "," + (this.inst.opacity*100); break;
+        case 6: parsed = value + "," + value; break;
+        case 7: parsed = this.inst.x + "," + this.inst.y; break;
+        case 8: parsed = this.inst.x + "," + this.inst.y; break;
+        case 9:
+          if (this.inst.curFrame !== undefined)
+            parsed = (this.inst.width/this.inst.curFrame.width) + "," +(this.inst.height/this.inst.curFrame.height)
+          else
+            parsed = "1,1";
+          break;
+        default:  break;
+      }
+    }
+    if (parseText.substring(0,8) === "relative") {
+      var param1 = parseText.match(/\((.*?)\)/);
+      if (param1) {
+        var relativex = parseFloat(param1[1].split(",")[0]);
+        var relativey = parseFloat(param1[1].split(",")[1]);
+      }
+      if (isNaN(relativex)) relativex = 0;
+      if (isNaN(relativey)) relativey = 0;
+      switch (tweened) {
+        case 0: parsed = (this.inst.x+relativex) + "," + (this.inst.y+relativey); break;
+        case 1: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 2: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 3: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 4: parsed = (cr.to_degrees(this.inst.angle)+relativex) + "," + (cr.to_degrees(this.inst.angle)+relativey); break;
+        case 5: parsed = (this.inst.opacity*100+relativex) + "," + (this.inst.opacity*100+relativey); break;
+        case 6: parsed = value+relativex + "," + value+relativex; break;
+        case 7: parsed = (this.inst.x+relativex) + "," + (this.inst.y); break;
+        case 8: parsed = (this.inst.x) + "," + (this.inst.y+relativex); break;
+        case 9: parsed = (relativex) + "," + (relativey); break;
+        default:  break;
+      }
+    }
+    return parsed;
+  };
+	behinstProto.addToTweenList = function(tname, tweened, easing, init, targ, duration, enforce)
+  {
+    init = this.parseCurrent(tweened, init);
+    targ = this.parseCurrent(tweened, targ);
+    if (this.tween_list[tname] !== undefined) {
+      delete this.tween_list[tname]
+    }
+    this.tween_list[tname] = new TweenObject(tname, tweened, easing, init, targ, duration, enforce);
+    this.tween_list[tname].dt = 0;
+  };
+	behinstProto.saveToJSON = function ()
+	{
+    var v = JSON.stringify(this.tween_list["default"]);
+		return {
+			"playmode": this.playmode,
+			"active": this.active,
+			"tweened": this.tweened,
+			"easing": this.easing,
+			"target": this.target,
+			"targetmode": this.targetmode,
+			"useCurrent": this.useCurrent,
+			"duration": this.duration,
+			"enforce": this.enforce,
+			"value": this.value,
+			"tweenlist": JSON.stringify(this.tween_list["default"])
+		};
+	};
+  TweenObject.Load = function(rawObj, tname, tweened, easing, init, targ, duration, enforce)
+  {
+    var obj = new TweenObject(tname, tweened, easing, init, targ, duration, enforce);
+    for(var i in rawObj)
+        obj[i] = rawObj[i];
+    return obj;
+  };
+	behinstProto.loadFromJSON = function (o)
+	{
+    var x = JSON.parse(o["tweenlist"]);
+    var tempObj = TweenObject.Load(x, x.name, x.tweened, x.easefunc, x.initialparam1+","+x.initialparam2, x.targetparam1+","+x.targetparam2, x.duration, x.enforce);
+		this.tween_list["default"] = tempObj;
+	  this.playmode = o["playmode"];
+		this.active = o["active"];
+		this.movement = o["tweened"];
+		this.easing = o["easing"];
+		this.target = o["target"];
+		this.targetmode = o["targetmode"];
+		this.useCurrent = o["useCurrent"];
+		this.duration = o["duration"];
+		this.enforce = o["enforce"];
+		this.value = o["value"];
+	};
+	behinstProto.setProgressTo = function (mark)
+	{
+    if (mark > 1.0) mark = 1.0;
+    if (mark < 0.0) mark = 0.0;
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      inst.lastKnownValue = 0;
+      inst.lastKnownValue2 = 0;
+      inst.state = 3;
+      inst.progress = mark * inst.duration;
+      var factor = inst.OnTick(0);
+      this.updateTween(inst, factor);
+    }
+  }
+	behinstProto.startTween = function (startMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if (this.useCurrent) {
+        var init = this.parseCurrent(inst.tweened, "current");
+        var target = this.parseCurrent(inst.tweened, this.target);
+        inst.setInitial(init);
+        inst.setTarget(target);
+      }
+      if (startMode === 0) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        inst.state = 1;
+      }
+      if (startMode === 1) {
+        inst.state = inst.lastState;
+      }
+      if ((startMode === 2) || (startMode === 4)) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        if (startMode == 2) inst.state = 4; //state ping pong
+        if (startMode == 4) inst.state = 6; //state flip flop
+      }
+      if (startMode === 3) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        inst.state = 5;
+      }
+    }
+  }
+	behinstProto.stopTween = function (stopMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if ((inst.state != 3) && (inst.state != 0)) //don't save paused/seek state
+        inst.lastState = inst.state;
+      if (stopMode === 1) inst.progress = 0.0;
+      if (stopMode === 2) inst.progress = inst.duration;
+      inst.state = 3;
+      var factor = inst.OnTick(0);
+      this.updateTween(inst, factor);
+    }
+  }
+	behinstProto.reverseTween = function(reverseMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if (reverseMode === 1) {
+        inst.progress = inst.duration;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onReverseStart = true;
+      }
+      inst.state = 2;
+    }
+  }
+	behinstProto.updateTween = function (inst, factor)
+	{
+    if (inst.tweened === 0) {
+      if (inst.enforce) {
+	      this.inst.x = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+        this.inst.y = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      } else {
+        this.inst.x += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        this.inst.y += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 1) {
+      if (inst.enforce) {
+  			this.inst.width = (inst.initialparam1 + ((inst.targetparam1 - inst.initialparam1) * (factor)));
+	   		this.inst.height = (inst.initialparam2 + ((inst.targetparam2 - inst.initialparam2) * (factor)));
+      } else {
+       	this.inst.width +=  ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+      	this.inst.height += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 2) {
+      if (inst.enforce) {
+  			this.inst.width = (inst.initialparam1 + ((inst.targetparam1 - inst.initialparam1) * (factor)));
+      } else {
+      	this.inst.width += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 3) {
+      if (inst.enforce) {
+	   		this.inst.height = (inst.initialparam2 + ((inst.targetparam2 - inst.initialparam2) * (factor)));
+      } else {
+      	this.inst.height += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 4) {
+      if (inst.enforce) {
+  		  var tangle = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+  		  this.inst.angle = cr.clamp_angle(cr.to_radians(tangle));
+      } else {
+  		  var tangle = ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+  		  this.inst.angle = cr.clamp_angle(this.inst.angle + cr.to_radians(tangle));
+        inst.lastKnownValue = (inst.targetparam1 - inst.initialparam1) * factor;
+      }
+    } else if (inst.tweened === 5) {
+      if (inst.enforce) {
+  		  this.inst.opacity = (inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor) / 100;
+      } else {
+  		  this.inst.opacity += (((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue) / 100;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 6) {
+      if (inst.enforce) {
+  		  this.value = (inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor);
+      } else {
+  		  this.value += (((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue);
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 7) {
+      if (inst.enforce) {
+	      this.inst.x = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+      } else {
+        this.inst.x += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 8) {
+      if (inst.enforce) {
+        this.inst.y = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      } else {
+        this.inst.y += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 9) {
+      var scalex = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+      var scaley = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      if (this.inst.width < 0) scalex = inst.initialparam1 + (inst.targetparam1 + inst.initialparam1) * -factor;
+      if (this.inst.height < 0)  scaley = inst.initialparam2 + (inst.targetparam2 + inst.initialparam2) * -factor;
+      if (inst.enforce) {
+        this.inst.width = this.inst.curFrame.width * scalex;
+        this.inst.height = this.inst.curFrame.height * scaley;
+      } else {
+        if (this.inst.width < 0) {
+      	  this.inst.width = scalex * (this.inst.width / (-1+inst.lastKnownValue));
+          inst.lastKnownValue = scalex + 1
+        } else {
+      	  this.inst.width = scalex * (this.inst.width / (1+inst.lastKnownValue));
+          inst.lastKnownValue = scalex - 1;
+        }
+        if (this.inst.height < 0) {
+          this.inst.height = scaley * (this.inst.height / (-1+inst.lastKnownValue2));
+          inst.lastKnownValue2 = scaley + 1
+        } else {
+          this.inst.height = scaley * (this.inst.height / (1+inst.lastKnownValue2));
+          inst.lastKnownValue2 = scaley - 1;
+        }
+      }
+    }
+    this.inst.set_bbox_changed();
+  }
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+    var inst = this.tween_list["default"];
+    if (inst.state !== 0) {
+      if (inst.onStart) {
+  			this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnStart, this.inst);
+        inst.onStart = false;
+      }
+      if (inst.onReverseStart) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnReverseStart, this.inst);
+        inst.onReverseStart = false;
+      }
+      this.active = (inst.state == 1) || (inst.state == 2) || (inst.state == 4) || (inst.state == 5) || (inst.state == 6);
+      var factor = inst.OnTick(dt);
+      this.updateTween(inst, factor);
+      if (inst.onEnd) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnEnd, this.inst);
+        inst.onEnd = false;
+      }
+      if (inst.onReverseEnd) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnReverseEnd, this.inst);
+        inst.onReverseEnd = false;
+      }
+    }
+	};
+	behaviorProto.cnds = {};
+	var cnds = behaviorProto.cnds;
+	cnds.IsActive = function ()
+	{
+		return (this.tween_list["default"].state !== 0);
+	};
+	cnds.IsReversing = function ()
+	{
+		return (this.tween_list["default"].state == 2);
+	};
+	cnds.CompareProgress = function (cmp, v)
+	{
+    var inst = this.tween_list["default"];
+		return cr.do_cmp((inst.progress / inst.duration), cmp, v);
+	};
+	cnds.OnThreshold = function (cmp, v)
+	{
+    var inst = this.tween_list["default"];
+    this.threshold = (cr.do_cmp((inst.progress / inst.duration), cmp, v));
+    var ret = (this.oldthreshold != this.threshold) && (this.threshold);
+    if (ret) {
+      this.oldthreshold = this.threshold;
+    }
+		return ret;
+	};
+	cnds.OnStart = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onStart;
+	};
+	cnds.OnReverseStart = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onReverseStart;
+	};
+  cnds.OnEnd = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onEnd;
+	};
+  cnds.OnReverseEnd = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onReverseEnd;
+	};
+	behaviorProto.acts = {};
+	var acts = behaviorProto.acts;
+	acts.Start = function (startmode, current)
+	{
+    this.threshold = false;
+    this.oldthreshold = false;
+    this.useCurrent = (current == 1);
+    this.startTween(startmode);
+	};
+	acts.Stop = function (stopmode)
+	{
+    this.stopTween(stopmode);
+	};
+	acts.Reverse = function (revMode)
+	{
+    this.threshold = false;
+    this.oldthreshold = false;
+    this.reverseTween(revMode);
+	};
+ 	acts.ProgressTo = function (progress)
+	{
+    this.setProgressTo(progress);
+	};
+	acts.SetDuration = function (x)
+	{
+    if (isNaN(x)) return;
+    if (x < 0) return;
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].duration = x;
+	};
+	acts.SetEnforce = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].enforce = (x===1);
+	};
+	acts.SetInitial = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    var init = this.parseCurrent(this.tween_list["default"].tweened, x);
+		this.tween_list["default"].setInitial(init);
+	};
+	acts.SetTarget = function (targettype, absrel, x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    if (isNaN(x)) return;
+    var inst = this.tween_list["default"];
+    var parsed = x + "";
+    this.targetmode = absrel;
+    var x1 = "";
+    var x2 = "";
+    if (absrel === 1) {
+      this.target = "relative(" + parsed + ")";
+      switch (targettype) {
+        case 0: x1 = (this.inst.x + x); x2 = inst.targetparam2; break;
+        case 1: x1 = inst.targetparam1; x2 = (this.inst.y + x); break;
+        case 2: x1 = "" + cr.to_degrees(this.inst.angle + cr.to_radians(x)); x2 = x1; break; //angle
+        case 3: x1 = "" + (this.inst.opacity*100) + x; x2 = x1; break; //opacity
+        case 4: x1 = (this.inst.width + x); x2 = inst.targetparam2; break; //width
+        case 5: x1 = inst.targetparam1; x2 = (this.inst.height + x); break; //height
+        case 6: x1 = x; x2 = x; break; //value
+        default:  break;
+      }
+      parsed = x1 + "," + x2;
+    } else {
+      switch (targettype) {
+        case 0: x1 = x; x2 = inst.targetparam2; break;
+        case 1: x1 = inst.targetparam1; x2 = x; break;
+        case 2: x1 = x; x2 = x; break; //angle
+        case 3: x1 = x; x2 = x; break; //opacity
+        case 4: x1 = x; x2 = inst.targetparam2; break; //width
+        case 5: x1 = inst.targetparam1; x2 = x; break; //height
+        case 6: x1 = x; x2 = x; break; //value
+        default:  break;
+      }
+      parsed = x1 + "," + x2;
+      this.target = parsed;
+    }
+    var init = this.parseCurrent(this.tween_list["default"].tweened, "current");
+    var targ = this.parseCurrent(this.tween_list["default"].tweened, parsed);
+ 		inst.setInitial(init);
+ 		inst.setTarget(targ);
+	};
+	acts.SetTweenedProperty = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].tweened = x;
+	};
+	acts.SetEasing = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].easefunc = x;
+	};
+ 	acts.SetEasingParam = function (x, a, p, t, s)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    this.tween_list["default"].easingparam[x].optimized = false;
+		this.tween_list["default"].easingparam[x].a = a;
+		this.tween_list["default"].easingparam[x].p = p;
+		this.tween_list["default"].easingparam[x].t = t;
+		this.tween_list["default"].easingparam[x].s = s;
+	};
+ 	acts.ResetEasingParam = function ()
+	{
+    if (this.tween_list["default"] === undefined) return;
+    this.tween_list["default"].optimized = true;
+	};
+ 	acts.SetValue = function (x)
+	{
+    var inst = this.tween_list["default"];
+		this.value = x;
+    if (inst.tweened === 6)
+      inst.setInitial( this.parseCurrent(inst.tweened, "current") );
+	};
+	acts.SetParameter = function (tweened, easefunction, target, duration, enforce)
+	{
+    if (this.tween_list["default"] === undefined) {
+      this.addToTweenList("default", tweened, easefunction, initial, target, duration, enforce, 0);
+    } else {
+      var inst = this.tween_list["default"];
+      inst.tweened = tweened;
+  		inst.easefunc = easefunction;
+      inst.setInitial( this.parseCurrent(tweened, "current") );
+      inst.setTarget( this.parseCurrent(tweened, target) );
+      inst.duration = duration;
+      inst.enforce = (enforce === 1);
+    }
+	};
+	behaviorProto.exps = {};
+	var exps = behaviorProto.exps;
+	exps.State = function (ret)
+	{
+    var parsed = "N/A";
+    switch (this.tween_list["default"].state) {
+      case 0: parsed = "paused"; break;
+      case 1: parsed = "playing"; break;
+      case 2: parsed = "reversing"; break;
+      case 3: parsed = "seeking"; break;
+      default:  break;
+    }
+    ret.set_string(parsed);
+	};
+	exps.Progress = function (ret)
+	{
+    var progress = this.tween_list["default"].progress/this.tween_list["default"].duration;
+    ret.set_float(progress);
+	};
+	exps.Duration = function (ret)
+	{
+    ret.set_float(this.tween_list["default"].duration);
+	};
+	exps.Target = function (ret)
+	{
+    var inst = this.tween_list["default"];
+    var parsed = "N/A";
+    switch (inst.tweened) {
+      case 0: parsed = inst.targetparam1; break;
+      case 1: parsed = inst.targetparam2; break;
+      case 2: parsed = inst.targetparam1; break;
+      case 3: parsed = inst.targetparam1; break;
+      case 4: parsed = inst.targetparam1; break;
+      case 5: parsed = inst.targetparam2; break;
+      case 6: parsed = inst.targetparam1; break;
+      default:  break;
+    }
+    ret.set_float(parsed);
+	};
+	exps.Value = function (ret)
+	{
+    var tval = this.value;
+    ret.set_float(tval);
+	};
+	exps.Tween = function (ret, a_, b_, x_, easefunc_)
+	{
+    var currX = (x_>1.0?1.0:x_);
+    var factor = easeFunc(easefunc_, currX<0.0?0.0:currX, 0.0, 1.0, 1.0, false, false);
+    ret.set_float(a_ + factor * (b_-a_));
+	};
+}());
+;
+;
+cr.behaviors.rex_Anchor_mod = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.rex_Anchor_mod.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.anch_left = this.properties[0];		// 0 = left, 1 = right, 2 = none
+		this.anch_top = this.properties[1];			// 0 = top, 1 = bottom, 2 = none
+		this.anch_right = this.properties[2];		// 0 = none, 1 = right
+		this.anch_bottom = this.properties[3];		// 0 = none, 1 = bottom
+		this.inst.update_bbox();
+		this.xleft = this.inst.bbox.left;
+		this.ytop = this.inst.bbox.top;
+		this.xright = this.runtime.original_width - this.inst.bbox.left;
+		this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+		this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+		this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+		this.enabled = (this.properties[4] !== 0);
+		this.set_once = (this.properties[5] == 1);
+		this.update_cnt = 0;
+		this.viewLeft_saved = null;
+		this.viewRight_saved = null;
+		this.viewTop_saved = null;
+		this.viewBottom_saved = null;
+	};
+	behinstProto.is_layer_size_changed = function()
+	{
+	    var layer = this.inst.layer;
+	    return (this.viewLeft_saved != layer.viewLeft) ||
+	           (this.viewRight_saved != layer.viewRight) ||
+	           (this.viewTop_saved != layer.viewTop) ||
+	           (this.viewBottom_saved != layer.viewBottom);
+	};
+	behinstProto.tick = function ()
+	{
+		if (!this.enabled)
+			return;
+        if (this.set_once)
+        {
+            if (this.is_layer_size_changed())
+            {
+                var layer = this.inst.layer;
+		        this.viewLeft_saved = layer.viewLeft;
+		        this.viewRight_saved = layer.viewRight;
+		        this.viewTop_saved = layer.viewTop;
+		        this.viewBottom_saved = layer.viewBottom;
+		        this.update_cnt = 2;
+            }
+            if (this.update_cnt == 0)  // no need to update
+                return;
+            else                       // update once
+                this.update_cnt -= 1;
+        }
+		var n;
+		var layer = this.inst.layer;
+		var inst = this.inst;
+		var bbox = this.inst.bbox;
+		if (this.anch_left === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewLeft + this.xleft) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_left === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.xright) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_top === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewTop + this.ytop) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_top === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.ybottom) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_right === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.rdiff) - bbox.right;
+			if (n !== 0)
+			{
+				inst.width += n;
+				if (inst.width < 0)
+					inst.width = 0;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_bottom === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.bdiff) - bbox.bottom;
+			if (n !== 0)
+			{
+				inst.height += n;
+				if (inst.height < 0)
+					inst.height = 0;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.set_once)
+		    this.runtime.trigger(cr.behaviors.rex_Anchor_mod.prototype.cnds.OnAnchored, this.inst);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"xleft": this.xleft,
+			"ytop": this.ytop,
+			"xright": this.xright,
+			"ybottom": this.ybottom,
+			"rdiff": this.rdiff,
+			"bdiff": this.bdiff,
+			"enabled": this.enabled
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.xleft = o["xleft"];
+		this.ytop = o["ytop"];
+		this.xright = o["xright"];
+		this.ybottom = o["ybottom"];
+		this.rdiff = o["rdiff"];
+		this.bdiff = o["bdiff"];
+		this.enabled = o["enabled"];
+	};
+	function Cnds() {};
+	behaviorProto.cnds = new Cnds();
+	Cnds.prototype.OnAnchored = function ()
+	{
+        return true;
+	};
+	function Acts() {};
+	behaviorProto.acts = new Acts();
+	Acts.prototype.SetEnabled = function (e)
+	{
+		if (this.enabled && e === 0)
+			this.enabled = false;
+		else if (!this.enabled && e !== 0)
+		{
+			this.inst.update_bbox();
+			this.xleft = this.inst.bbox.left;
+			this.ytop = this.inst.bbox.top;
+			this.xright = this.runtime.original_width - this.inst.bbox.left;
+			this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+			this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+			this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+			this.enabled = true;
+		}
+	};
+	function Exps() {};
+	behaviorProto.exps = new Exps();
+}());
 ;
 ;
 cr.behaviors.scrollto = function(runtime)
@@ -30357,25 +33451,31 @@ cr.behaviors.solid = function(runtime)
 cr.getObjectRefTable = function () { return [
 	cr.plugins_.aekiro_proui2,
 	cr.plugins_.Audio,
-	cr.plugins_.Browser,
 	cr.plugins_.Button,
+	cr.plugins_.Browser,
 	cr.plugins_.Function,
-	cr.plugins_.Keyboard,
 	cr.plugins_.Globals,
+	cr.plugins_.Keyboard,
 	cr.plugins_.Mouse,
-	cr.plugins_.Sprite,
+	cr.plugins_.Particles,
+	cr.plugins_.TiledSprite,
 	cr.plugins_.Touch,
-	cr.plugins_.SpriteFontPlus,
+	cr.plugins_.Sprite,
 	cr.plugins_.Text,
+	cr.plugins_.SpriteFontPlus,
 	cr.plugins_.TiledBg,
 	cr.plugins_.TR_HtmlText,
 	cr.plugins_.ValerypopoffJSPlugin,
+	cr.behaviors.Anchor,
+	cr.behaviors.rex_Anchor_mod,
 	cr.behaviors.Timer,
 	cr.behaviors.Rex_pushOutSolid,
 	cr.behaviors.LOS,
 	cr.behaviors.Rex_MoveTo,
 	cr.behaviors.Pin,
+	cr.behaviors.TR_Level,
 	cr.behaviors.Bullet,
+	cr.behaviors.destroy,
 	cr.behaviors.EightDir,
 	cr.behaviors.bound,
 	cr.behaviors.scrollto,
@@ -30384,21 +33484,24 @@ cr.getObjectRefTable = function () { return [
 	cr.behaviors.TR_Scale,
 	cr.behaviors.Rex_pinOffsetXY,
 	cr.behaviors.aekiro_progress,
-	cr.behaviors.Flash,
-	cr.behaviors.destroy,
 	cr.behaviors.Sin,
+	cr.behaviors.lunarray_LiteTween,
+	cr.behaviors.Flash,
 	cr.behaviors.solid,
 	cr.system_object.prototype.cnds.IsGroupActive,
-	cr.plugins_.ValerypopoffJSPlugin.prototype.cnds.AllScriptsLoaded,
 	cr.system_object.prototype.cnds.TriggerOnce,
+	cr.plugins_.Browser.prototype.acts.ConsoleLog,
+	cr.plugins_.Function.prototype.acts.CallFunction,
+	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
+	cr.plugins_.Function.prototype.cnds.OnFunction,
+	cr.plugins_.ValerypopoffJSPlugin.prototype.acts.ExecuteJSWithParams,
+	cr.plugins_.Function.prototype.exps.Param,
+	cr.plugins_.ValerypopoffJSPlugin.prototype.cnds.C2CompareExecReturnWithParams,
+	cr.plugins_.Function.prototype.cnds.CompareParam,
 	cr.plugins_.ValerypopoffJSPlugin.prototype.acts.Call,
+	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
 	cr.system_object.prototype.cnds.Compare,
 	cr.plugins_.ValerypopoffJSPlugin.prototype.exps.JSCodeValue,
-	cr.system_object.prototype.cnds.Else,
-	cr.behaviors.TR_AnimatedCounter.prototype.acts.AddValue,
-	cr.system_object.prototype.acts.AddVar,
-	cr.plugins_.Button.prototype.cnds.OnClicked,
-	cr.plugins_.Audio.prototype.acts.SetPaused,
 	cr.system_object.prototype.cnds.OnLayoutStart,
 	cr.plugins_.Sprite.prototype.acts.SetPos,
 	cr.plugins_.Sprite.prototype.exps.X,
@@ -30406,45 +33509,52 @@ cr.getObjectRefTable = function () { return [
 	cr.behaviors.Pin.prototype.acts.Pin,
 	cr.behaviors.Rex_pinOffsetXY.prototype.acts.Pin,
 	cr.plugins_.Sprite.prototype.acts.SetVisible,
-	cr.plugins_.TiledBg.prototype.acts.SetVisible,
+	cr.plugins_.TiledSprite.prototype.acts.SetVisible,
+	cr.plugins_.Sprite.prototype.acts.Spawn,
+	cr.plugins_.Particles.prototype.acts.SetPos,
 	cr.system_object.prototype.acts.Wait,
 	cr.plugins_.Sprite.prototype.acts.Destroy,
 	cr.plugins_.Mouse.prototype.cnds.IsButtonDown,
 	cr.plugins_.Globals.prototype.cnds.IsBoolInstanceVarSet,
 	cr.plugins_.Globals.prototype.acts.SetBoolInstanceVar,
 	cr.system_object.prototype.cnds.CompareBetween,
-	cr.plugins_.TiledBg.prototype.acts.SetInstanceVar,
-	cr.behaviors.aekiro_progress.prototype.acts.setValue,
-	cr.plugins_.Sprite.prototype.acts.Spawn,
-	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+	cr.plugins_.TiledSprite.prototype.acts.SetAnim,
+	cr.system_object.prototype.cnds.Else,
+	cr.plugins_.TiledSprite.prototype.acts.SetInstanceVar,
+	cr.plugins_.TiledSprite.prototype.acts.SetWidth,
+	cr.system_object.prototype.exps.clamp,
+	cr.plugins_.Audio.prototype.acts.Play,
+	cr.behaviors.TR_Level.prototype.cnds.LevelCompare,
 	cr.plugins_.Sprite.prototype.acts.SetAngle,
 	cr.plugins_.Sprite.prototype.exps.Angle,
-	cr.behaviors.Bullet.prototype.acts.SetSpeed,
-	cr.plugins_.Sprite.prototype.acts.SetBoolInstanceVar,
 	cr.plugins_.Sprite.prototype.acts.SetAnim,
+	cr.plugins_.Sprite.prototype.acts.SetBoolInstanceVar,
+	cr.behaviors.Bullet.prototype.acts.SetSpeed,
 	cr.system_object.prototype.cnds.Every,
-	cr.plugins_.TiledBg.prototype.acts.AddInstanceVar,
+	cr.plugins_.TiledSprite.prototype.acts.AddInstanceVar,
 	cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
+	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
 	cr.plugins_.Keyboard.prototype.cnds.IsKeyDown,
 	cr.behaviors.EightDir.prototype.acts.SimulateControl,
 	cr.system_object.prototype.exps.angle,
 	cr.plugins_.Mouse.prototype.exps.X,
 	cr.plugins_.Mouse.prototype.exps.Y,
+	cr.behaviors.EightDir.prototype.cnds.IsMoving,
+	cr.plugins_.Particles.prototype.acts.SetRate,
+	cr.system_object.prototype.exps.random,
+	cr.plugins_.Sprite.prototype.acts.StopAnim,
 	cr.system_object.prototype.exps.timescale,
 	cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
 	cr.system_object.prototype.exps.lerp,
 	cr.system_object.prototype.exps.dt,
-	cr.system_object.prototype.exps.clamp,
 	cr.system_object.prototype.exps.cos,
 	cr.system_object.prototype.exps.sin,
-	cr.system_object.prototype.exps.random,
 	cr.plugins_.Sprite.prototype.acts.SetPosToObject,
 	cr.system_object.prototype.cnds.ForEach,
 	cr.plugins_.Sprite.prototype.exps.UID,
 	cr.behaviors.Rex_pushOutSolid.prototype.acts.AddObstacle,
 	cr.plugins_.Sprite.prototype.acts.SetScale,
 	cr.behaviors.Pin.prototype.acts.Unpin,
-	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
 	cr.system_object.prototype.cnds.PickByComparison,
 	cr.behaviors.LOS.prototype.cnds.HasLOSToObject,
 	cr.behaviors.Rex_MoveTo.prototype.cnds.IsMoving,
@@ -30452,41 +33562,70 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Sprite.prototype.cnds.IsOverlapping,
 	cr.plugins_.Sprite.prototype.acts.MoveAtAngle,
 	cr.behaviors.Rex_MoveTo.prototype.acts.SetTargetPosByDistanceAngle,
-	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
+	cr.plugins_.Globals.prototype.acts.AddInstanceVar,
 	cr.behaviors.Timer.prototype.acts.StartTimer,
 	cr.behaviors.Timer.prototype.cnds.OnTimer,
 	cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
 	cr.plugins_.Sprite.prototype.cnds.CompareY,
+	cr.system_object.prototype.cnds.For,
+	cr.system_object.prototype.exps.loopindex,
+	cr.behaviors.Bullet.prototype.acts.SetAcceleration,
 	cr.plugins_.Sprite.prototype.cnds.OnAnimFinished,
-	cr.plugins_.Sprite.prototype.cnds.OnCollision,
-	cr.plugins_.Function.prototype.acts.CallFunction,
-	cr.plugins_.Function.prototype.cnds.OnFunction,
 	cr.system_object.prototype.acts.SetVar,
-	cr.plugins_.Function.prototype.exps.Param,
 	cr.plugins_.Sprite.prototype.cnds.PickByUID,
 	cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
-	cr.plugins_.Globals.prototype.acts.AddInstanceVar,
 	cr.behaviors.Flash.prototype.cnds.IsFlashing,
-	cr.plugins_.Browser.prototype.acts.ConsoleLog,
+	cr.plugins_.Sprite.prototype.cnds.OnCollision,
+	cr.plugins_.Sprite.prototype.exps.AnimationName,
 	cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
 	cr.plugins_.Sprite.prototype.cnds.CompareFrame,
 	cr.behaviors.Bullet.prototype.acts.SetAngleOfMotion,
-	cr.plugins_.Globals.prototype.acts.SetInstanceVar,
-	cr.plugins_.Sprite.prototype.exps.Count,
-	cr.plugins_.SpriteFontPlus.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.SpriteFontPlus.prototype.acts.SetText,
+	cr.plugins_.Globals.prototype.cnds.CompareInstanceVar,
+	cr.system_object.prototype.exps.choose,
+	cr.system_object.prototype.cnds.CompareVar,
 	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
 	cr.system_object.prototype.exps.floor,
 	cr.plugins_.Sprite.prototype.exps.AnimationFrameCount,
-	cr.plugins_.Globals.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.exps.Count,
+	cr.plugins_.Globals.prototype.acts.SetInstanceVar,
+	cr.plugins_.SpriteFontPlus.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetText,
+	cr.plugins_.Audio.prototype.cnds.IsTagPlaying,
 	cr.system_object.prototype.acts.SetLayerVisible,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetOpacity,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.Start,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetX,
+	cr.plugins_.SpriteFontPlus.prototype.exps.X,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetY,
+	cr.plugins_.SpriteFontPlus.prototype.exps.Y,
+	cr.plugins_.Sprite.prototype.acts.SetOpacity,
 	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
 	cr.system_object.prototype.cnds.LayerVisible,
-	cr.system_object.prototype.acts.RestartLayout,
+	cr.plugins_.Sprite.prototype.cnds.CompareOpacity,
+	cr.system_object.prototype.exps["int"],
+	cr.system_object.prototype.exps.replace,
+	cr.system_object.prototype.exps.layoutname,
+	cr.system_object.prototype.cnds.While,
+	cr.system_object.prototype.acts.GoToLayoutByName,
 	cr.system_object.prototype.cnds.ForEachOrdered,
 	cr.plugins_.Sprite.prototype.acts.MoveToTop,
 	cr.behaviors.Flash.prototype.acts.Flash,
 	cr.system_object.prototype.cnds.PickAll,
 	cr.system_object.prototype.cnds.Repeat,
-	cr.system_object.prototype.exps.loopindex
+	cr.plugins_.Sprite.prototype.acts.SetAnimSpeed,
+	cr.behaviors.Flash.prototype.cnds.OnFlashEnded,
+	cr.plugins_.Sprite.prototype.cnds.OnCreated,
+	cr.behaviors.TR_Level.prototype.acts.SetExperience,
+	cr.behaviors.aekiro_progress.prototype.acts.setValue,
+	cr.behaviors.TR_Level.prototype.exps.LevelExpProgress,
+	cr.behaviors.TR_Level.prototype.exps.CurrentLevel,
+	cr.behaviors.TR_Level.prototype.acts.AddExperience,
+	cr.behaviors.TR_Level.prototype.cnds.OnLevelUp,
+	cr.plugins_.Keyboard.prototype.cnds.OnKey,
+	cr.plugins_.Globals.prototype.acts.ResetVariables,
+	cr.system_object.prototype.acts.GoToLayout,
+	cr.plugins_.Globals.prototype.acts.ToggleBoolInstanceVar,
+	cr.system_object.prototype.acts.SetTimescale,
+	cr.plugins_.ValerypopoffJSPlugin.prototype.cnds.AllScriptsLoaded,
+	cr.system_object.prototype.cnds.IsPreview
 ];};
