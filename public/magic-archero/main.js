@@ -2,10 +2,13 @@ window.Gatoresume=function(){
     window.updateLastAdsTime();
     GatoAds.VideoAdComplete=true;
     setTimeout(function() {GatoAds.VideoAdComplete=false;},100);
-    GatoAds.VideoIsPlaying=false
-    }
+    cr_setSuspended(false);
+    GatoAds.VideoIsPlaying=false 
+}
+
 window.Gatopause=function(){
     console.log("[IGX] ADS: Video ad started")
+    cr_setSuspended(true);
     GatoAds.VideoIsPlaying=true;
 }
 

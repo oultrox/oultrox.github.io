@@ -33625,6 +33625,11 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.acts.GoToLayout,
 	cr.plugins_.Globals.prototype.acts.ToggleBoolInstanceVar,
 	cr.system_object.prototype.acts.SetTimescale,
+	cr.plugins_.Browser.prototype.cnds.OnUpdateFound,
+	cr.plugins_.Audio.prototype.acts.SetMasterVolume,
+	cr.system_object.prototype.exps.infinity,
+	cr.plugins_.Browser.prototype.cnds.OnUpdateReady,
+	cr.plugins_.Browser.prototype.acts.Reload,
 	cr.plugins_.ValerypopoffJSPlugin.prototype.cnds.AllScriptsLoaded,
 	cr.system_object.prototype.exps.projectversion
 ];};
