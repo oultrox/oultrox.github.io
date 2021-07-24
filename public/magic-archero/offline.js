@@ -1,5 +1,5 @@
 ﻿{
-	"version": 1627087544,
+	"version": 1627090672,
 	"fileList": [
 		"data.js",
 		"c2runtime.js",
@@ -63,6 +63,8 @@
 		"images/botonplayshadow-sheet0.png",
 		"images/screenshot_-sheet0.png",
 		"images/screenshot_-sheet1.png",
+		"images/tiledbarwrongspot.png",
+		"images/tiledbargoodspot.png",
 		"media/enemigoherido.m4a",
 		"media/enemigoherido.ogg",
 		"media/explosionbomba.m4a",
