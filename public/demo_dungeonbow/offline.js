@@ -1,5 +1,5 @@
 ﻿{
-	"version": 1627189793,
+	"version": 1627267160,
 	"fileList": [
 		"data.js",
 		"c2runtime.js",
@@ -71,6 +71,7 @@
 		"images/buttonquit-sheet0.png",
 		"images/hearticon-sheet0.png",
 		"images/aimsprite-sheet0.png",
+		"images/sprite2-sheet0.png",
 		"media/enemigoherido.m4a",
 		"media/enemigoherido.ogg",
 		"media/explosionbomba.m4a",
