@@ -30,10 +30,8 @@ function BIGIGX (){
         console.log("[IGX] Config Finished")
 
         
-        FBInstant.options.adsOptions.AdinplayUrl="https://api.adinplay.com/libs/aiptag/pub/KKL/erigato.space/tag.min.js"
-        //https://api.adinplay.com/libs/aiptag/pub/KKL/goodoo.io/tag.min.js NOTE: Banner ads dont work with this tag
-        //https://api.adinplay.com/libs/aiptag/pub/KKL/erigato.space/tag.min.js
-        //https://api.adinplay.com/player/v2/HCW/hurricanewars.online/player.min.js NOTE: Banner ads dont work with this tag
+        FBInstant.options.adsOptions.AdinplayUrl="https://api.adinplay.com/libs/aiptag/pub/OLX/oultrox.com/tag.min.js"
+
         FBInstant.options.adsOptions.GamedestributionAppId = "GAMEDESTRIBUTION APP ID"; 
 
         FBInstant.options.adsOptions.GameMonetizeAppId="8531byjxglyfqtzzhozfv2b2aywyaiyi"
