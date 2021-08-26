@@ -34,7 +34,7 @@ function BIGIGX (){
 
         FBInstant.options.adsOptions.GamedestributionAppId = "GAMEDESTRIBUTION APP ID"; 
 
-        FBInstant.options.adsOptions.GameMonetizeAppId="8531byjxglyfqtzzhozfv2b2aywyaiyi"
+        FBInstant.options.adsOptions.GameMonetizeAppId="q0p9cartcsl1wapzhrln9qbh3aosc90i"
 
         FBInstant.options.analyticsOptions.FaceBookAppId="337882330856518";
 
