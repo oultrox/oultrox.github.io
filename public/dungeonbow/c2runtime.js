@@ -34243,7 +34243,6 @@ cr.behaviors.solid = function(runtime)
 	behaviorProto.acts = new Acts();
 }());
 cr.getObjectRefTable = function () { return [
-	cr.plugins_.aekiro_proui2,
 	cr.plugins_.Audio,
 	cr.plugins_.Browser,
 	cr.plugins_.Button,
@@ -34252,15 +34251,16 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Globals,
 	cr.plugins_.Mouse,
 	cr.plugins_.Particles,
-	cr.plugins_.TiledSprite,
-	cr.plugins_.Text,
-	cr.plugins_.Sprite,
 	cr.plugins_.Touch,
-	cr.plugins_.SpriteFontPlus,
 	cr.plugins_.Spritefont2,
 	cr.plugins_.TiledBg,
+	cr.plugins_.Sprite,
+	cr.plugins_.TiledSprite,
+	cr.plugins_.SpriteFontPlus,
+	cr.plugins_.Text,
 	cr.plugins_.TR_HtmlText,
 	cr.plugins_.ValerypopoffJSPlugin,
+	cr.plugins_.aekiro_proui2,
 	cr.behaviors.Anchor,
 	cr.behaviors.rex_Anchor_mod,
 	cr.behaviors.Timer,
