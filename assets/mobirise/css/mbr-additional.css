@@ -985,7 +985,7 @@ a {
   background-color: #232323;
 }
 .cid-s48udlf8KU .mbr-section-title {
-  text-align: left;
+  text-align: center;
   color: #ff8a8a;
 }
 .cid-s48udlf8KU .mbr-section-subtitle {
@@ -1050,6 +1050,9 @@ a {
 .cid-trVN73Wqlq .mbr-section-subtitle,
 .cid-trVN73Wqlq .mbr-text {
   text-align: center;
+}
+.cid-trVN73Wqlq .mbr-text {
+  color: #bbbbbb;
 }
 .cid-trOV6BUKw3 {
   padding-top: 2rem;
