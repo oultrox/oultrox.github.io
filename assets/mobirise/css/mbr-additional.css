@@ -903,7 +903,7 @@ a {
   height: 90px;
   padding: 0.5rem 0.6rem;
   flex-wrap: nowrap;
-  background: rgba(160, 225, 225, 0.6) !important;
+  background: rgba(160, 225, 225, 0.7) !important;
   left: 0;
   right: 0;
   -webkit-box-pack: justify;
@@ -945,7 +945,7 @@ a {
   transition: 0.3s all !important;
   min-width: auto;
   background: #a0e1e1;
-  background: rgba(160, 225, 225, 0.6) !important;
+  background: rgba(160, 225, 225, 0.7) !important;
 }
 .cid-uee6TTuN1z .nav-item:focus,
 .cid-uee6TTuN1z .nav-link:focus {
@@ -1275,8 +1275,8 @@ a {
     border-radius: 1.5rem;
     background: #a0e1e1;
     opacity: 1;
-    border-color: rgba(160, 225, 225, 0.6) !important;
-    background: rgba(160, 225, 225, 0.6) !important;
+    border-color: rgba(160, 225, 225, 0.7) !important;
+    background: rgba(160, 225, 225, 0.7) !important;
     backdrop-filter: blur(8px);
   }
   .cid-uee6TTuN1z .navbar-nav .nav-item .nav-link::after {
