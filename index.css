@@ -1,7 +1,7 @@
  .u-section-1 {
-  background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), url('images/cubitox2-ezgif.com-crop.gif'), url('images/cubitox2-ezgif.com-crop.gif');
+  background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), url('images/LinkedinBackground.png'), url('images/cubitox2-ezgif.com-crop.gif');
   background-repeat: no-repeat, no-repeat, no-repeat;
-  background-position: 50% 50%, 50% 50%, 50% 50%;
+  background-position: 50% 50%;
   background-size: cover, 180%, cover;
 }
 
