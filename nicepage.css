@@ -13346,10 +13346,10 @@ img.u-image,
 .u-sticky {
   transition: background-color 250ms, box-shadow 250ms;
 }
-.u-header.u-box-shadow {
+.u-header.u-box-shadow:not(.u-sticky) {
   z-index: 1;
 }
-.menu-overlay .u-header.u-box-shadow {
+.menu-overlay .u-header.u-box-shadow:not(.u-sticky) {
   z-index: unset;
 }
 .u-overlap .u-header {
