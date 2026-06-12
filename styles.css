@@ -410,6 +410,7 @@ a {
 .hero-specialties__list {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.9rem;
 }
 
