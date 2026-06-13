@@ -79,5 +79,33 @@ function highlightActiveSection() {
   });
 }
 
+// --- Hero corner parallax (desktop, fine pointer only) ----------
+const hero = document.getElementById("home");
+const finePointer = window.matchMedia(
+  "(min-width: 769px) and (hover: hover) and (pointer: fine)"
+);
+
+if (hero && finePointer.matches) {
+  const MAX = 26;
+  let raf = null;
+
+  hero.addEventListener("mousemove", (e) => {
+    const rect = hero.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      hero.style.setProperty("--px", (nx * MAX).toFixed(1) + "px");
+      hero.style.setProperty("--py", (ny * MAX).toFixed(1) + "px");
+      raf = null;
+    });
+  });
+
+  hero.addEventListener("mouseleave", () => {
+    hero.style.setProperty("--px", "0px");
+    hero.style.setProperty("--py", "0px");
+  });
+}
+
 // Initial state on load
 onScroll();
