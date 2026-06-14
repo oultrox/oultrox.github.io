@@ -385,7 +385,8 @@ a {
   pointer-events: none;
   filter: drop-shadow(0 0 6px rgba(124, 92, 255, 0.45));
   animation: cornerIn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  transition: top 0.3s ease, left 0.3s ease, right 0.3s ease, bottom 0.3s ease;
+  transition: top 0.12s ease-out, left 0.12s ease-out,
+    right 0.12s ease-out, bottom 0.12s ease-out;
 }
 
 @keyframes cornerIn {

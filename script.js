@@ -86,7 +86,7 @@ const finePointer = window.matchMedia(
 );
 
 if (hero && finePointer.matches) {
-  const MAX = 26;
+  const MAX = 34;
   let raf = null;
 
   hero.addEventListener("mousemove", (e) => {
