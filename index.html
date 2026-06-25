@@ -27,6 +27,7 @@
 
     <nav>
       <ul class="nav-menu" id="nav-menu">
+        <li><a href="#home" class="nav-link">Home</a></li>
         <li><a href="#games" class="nav-link">Games</a></li>
         <li><a href="#tools" class="nav-link">Tools</a></li>
         <li><a href="#skills" class="nav-link">Skills</a></li>
@@ -60,7 +61,17 @@
   <!-- ============ HERO ============ -->
   <section class="home-hero" id="home">
     <div class="home-hero__mask">
-      <img class="home-hero__image" src="assets/hero-bg.png" alt="" />
+      <img class="home-hero__image" id="hero-image" alt="" />
+      <script>
+        (function () {
+          var bgs = ["assets/hero-bg.png", "assets/hero-bg2.png"];
+          document.getElementById("hero-image").src =
+            bgs[(Math.random() * bgs.length) | 0];
+        })();
+      </script>
+      <noscript>
+        <img class="home-hero__image" src="assets/hero-bg.png" alt="" />
+      </noscript>
     </div>
 
     <div class="home-hero__content">
@@ -98,6 +109,29 @@
       </div>
 
       <div class="home-projects__grid">
+        <!-- Iron Rebellion -->
+        <article class="game-card">
+          <div class="game-card__media">
+            <img src="assets/games/IronRebellion.gif" alt="IRON REBELLION gameplay" class="game-card__image" loading="lazy" />
+          </div>
+          <div class="game-card__body">
+            <h3 class="game-card__title">IRON REBELLION</h3>
+            <span class="game-card__tagline">VR mech combat shooter</span>
+            <p class="game-card__subtitle">
+              Focused on server-authoritative networking, VR integration,
+              optimization, quality-of-life improvements, new game systems and content.
+            </p>
+            <div class="game-card__tags">
+              <span class="home-project-card__tag">VR</span>
+              <span class="home-project-card__tag">Networking</span>
+              <span class="home-project-card__tag">Unity3D</span>
+            </div>
+            <div class="game-card__actions">
+              <a href="https://store.steampowered.com/app/1192900/IRON_REBELLION/" target="_blank" rel="noreferrer" class="btn">Steam</a>
+            </div>
+          </div>
+        </article>
+
         <!-- Pit King -->
         <article class="game-card">
           <div class="game-card__media">
@@ -174,6 +208,30 @@
           </div>
         </article>
 
+        <!-- Cubito -->
+        <article class="game-card">
+          <div class="game-card__media">
+            <img src="assets/games/cubito.gif" alt="Cubito gameplay" class="game-card__image" loading="lazy" />
+          </div>
+          <div class="game-card__body">
+            <h3 class="game-card__title">Cubito</h3>
+            <span class="game-card__tagline">Twin-stick arena 2D shooter</span>
+            <p class="game-card__subtitle">
+              Built in C# with Unity3D. Featured on
+              indie platforms including Itch.io, Newgrounds, and Kongregate, where
+              it won awards and generated revenue.
+            </p>
+            <div class="game-card__tags">
+              <span class="home-project-card__tag">Unity3D</span>
+              <span class="home-project-card__tag">C#</span>
+              <span class="home-project-card__tag">Twin-Stick</span>
+            </div>
+            <div class="game-card__actions">
+              <a href="https://lonelymoongames.itch.io/cubito" target="_blank" rel="noreferrer" class="btn">itch.io</a>
+            </div>
+          </div>
+        </article>
+
         <!-- CODE RED -->
         <article class="game-card">
           <div class="game-card__media">
@@ -198,30 +256,6 @@
             </div>
             <div class="game-card__actions">
               <a href="https://www.newgrounds.com/portal/view/685819" target="_blank" rel="noreferrer" class="btn">Newgrounds</a>
-            </div>
-          </div>
-        </article>
-
-        <!-- Cubito -->
-        <article class="game-card">
-          <div class="game-card__media">
-            <img src="assets/games/cubito.gif" alt="Cubito gameplay" class="game-card__image" loading="lazy" />
-          </div>
-          <div class="game-card__body">
-            <h3 class="game-card__title">Cubito</h3>
-            <span class="game-card__tagline">Twin-stick arena 2D shooter</span>
-            <p class="game-card__subtitle">
-              Built in C# with Unity3D. Featured on
-              indie platforms including Itch.io, Newgrounds, and Kongregate, where
-              it won awards and generated revenue.
-            </p>
-            <div class="game-card__tags">
-              <span class="home-project-card__tag">Unity3D</span>
-              <span class="home-project-card__tag">C#</span>
-              <span class="home-project-card__tag">Twin-Stick</span>
-            </div>
-            <div class="game-card__actions">
-              <a href="https://lonelymoongames.itch.io/cubito" target="_blank" rel="noreferrer" class="btn">itch.io</a>
             </div>
           </div>
         </article>
@@ -255,6 +289,29 @@
           </div>
         </article>
 
+        <!-- Tranquil Cove -->
+        <article class="game-card">
+          <div class="game-card__media">
+            <img src="assets/games/tranquil-cove.gif" alt="Tranquil Cove gameplay" class="game-card__image" loading="lazy" />
+          </div>
+          <div class="game-card__body">
+            <h3 class="game-card__title">Tranquil Cove</h3>
+            <span class="game-card__tagline">VR horror game</span>
+            <p class="game-card__subtitle">
+              Helped build the architecture, gameplay systems, and VR GUI
+              billboarding, along with bug fixing, on this Unity3D horror title.
+            </p>
+            <div class="game-card__tags">
+              <span class="home-project-card__tag">Unity3D</span>
+              <span class="home-project-card__tag">C#</span>
+              <span class="home-project-card__tag">VR</span>
+            </div>
+            <div class="game-card__actions">
+              <a href="https://store.steampowered.com/app/1765820/Tranquil_Cove/?l=latam" target="_blank" rel="noreferrer" class="btn">Steam</a>
+            </div>
+          </div>
+        </article>
+
         <!-- Guy Slashing Stuff -->
         <article class="game-card">
           <div class="game-card__media">
@@ -278,29 +335,6 @@
             </div>
             <div class="game-card__actions">
               <a href="https://lonelymoongames.itch.io/guy-slashing-stuff-in-the-future" target="_blank" rel="noreferrer" class="btn">itch.io</a>
-            </div>
-          </div>
-        </article>
-
-        <!-- Tranquil Cove -->
-        <article class="game-card">
-          <div class="game-card__media">
-            <img src="assets/games/tranquil-cove.gif" alt="Tranquil Cove gameplay" class="game-card__image" loading="lazy" />
-          </div>
-          <div class="game-card__body">
-            <h3 class="game-card__title">Tranquil Cove</h3>
-            <span class="game-card__tagline">VR horror game</span>
-            <p class="game-card__subtitle">
-              Helped build the architecture, gameplay systems, and VR GUI
-              billboarding, along with bug fixing, on this Unity3D horror title.
-            </p>
-            <div class="game-card__tags">
-              <span class="home-project-card__tag">Unity3D</span>
-              <span class="home-project-card__tag">C#</span>
-              <span class="home-project-card__tag">VR</span>
-            </div>
-            <div class="game-card__actions">
-              <a href="https://store.steampowered.com/app/1765820/Tranquil_Cove/?l=latam" target="_blank" rel="noreferrer" class="btn">Steam</a>
             </div>
           </div>
         </article>
@@ -594,16 +628,14 @@
           <div class="home-skills__pills">
             <span class="home-skills__pill">C#</span>
             <span class="home-skills__pill">Unity3D</span>
-            <span class="home-skills__pill">Construct</span>
             <span class="home-skills__pill">Godot</span>
+            <span class="home-skills__pill">Construct</span>
             <span class="home-skills__pill">2D &amp; 3D</span>
             <span class="home-skills__pill">VR</span>
-            <span class="home-skills__pill">Mobile</span>
             <span class="home-skills__pill">Addressables</span>
             <span class="home-skills__pill">Photon</span>
             <span class="home-skills__pill">Peer-To-Peer Networking</span>
             <span class="home-skills__pill">ScriptableObjects</span>
-            <span class="home-skills__pill">GUI Design</span>
             <span class="home-skills__pill">uGUI</span>
           </div>
         </div>
@@ -611,7 +643,7 @@
         <div class="home-skills__column">
           <h3 class="home-skills__heading home-skills__heading--blue">Systems Focus</h3>
           <div class="home-skills__pills">
-            <span class="home-skills__pill home-skills__pill--blue">Gameplay Systems</span>
+            <span class="home-skills__pill home-skills__pill--blue">Gameplay</span>
             <span class="home-skills__pill home-skills__pill--blue">Game Feel</span>
             <span class="home-skills__pill home-skills__pill--blue">AI / Behavior</span>
             <span class="home-skills__pill home-skills__pill--blue">State Machines</span>
@@ -619,8 +651,8 @@
             <span class="home-skills__pill home-skills__pill--blue">Dependency Injection</span>
             <span class="home-skills__pill home-skills__pill--blue">Clean Code</span>
             <span class="home-skills__pill home-skills__pill--blue">Scalable Architecture</span>
-            <span class="home-skills__pill home-skills__pill--blue">Tool &amp; Framework Creation</span>
             <span class="home-skills__pill home-skills__pill--blue">SOLID</span>
+            <span class="home-skills__pill home-skills__pill--blue">Tool &amp; Framework Creation</span>
           </div>
         </div>
 
@@ -632,12 +664,13 @@
             <span class="home-skills__pill home-skills__pill--pink">Azure</span>
             <span class="home-skills__pill home-skills__pill--pink">Jira</span>
             <span class="home-skills__pill home-skills__pill--pink">Trello</span>
-            <span class="home-skills__pill home-skills__pill--pink">UI Implementation</span>
+            <span class="home-skills__pill home-skills__pill--pink">SteamWorks</span>
             <span class="home-skills__pill home-skills__pill--pink">Mobile APIs</span>
+            <span class="home-skills__pill home-skills__pill--pink">Google Play</span>
+            <span class="home-skills__pill home-skills__pill--pink">iOS</span>
             <span class="home-skills__pill home-skills__pill--pink">Optimization</span>
             <span class="home-skills__pill home-skills__pill--pink">Rapid Iteration</span>
             <span class="home-skills__pill home-skills__pill--pink">Third-Party Integration</span>
-            <span class="home-skills__pill home-skills__pill--pink">SteamWorks</span>
             <span class="home-skills__pill home-skills__pill--pink">Porting</span>
           </div>
         </div>
