@@ -13,29 +13,31 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Chakra+Petch:wght@300;400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- ============ NAVBAR ============ -->
-  <header class="header" id="header">
-    <a href="#home" class="header__brand">
+  <!-- ============ MENU ============ -->
+  <header class="menu" id="header">
+    <a href="#home" class="menu__brand">
       <h1>Jesús Pérez</h1>
+      <span>Senior Gameplay Engineer</span>
     </a>
 
-    <nav>
+    <nav aria-label="Main">
       <ul class="nav-menu" id="nav-menu">
-        <li><a href="#home" class="nav-link">Home</a></li>
-        <li><a href="#games" class="nav-link">Games</a></li>
-        <li><a href="#tools" class="nav-link">Tools</a></li>
-        <li><a href="#skills" class="nav-link">Skills</a></li>
-        <li><a href="#about" class="nav-link">About Me</a></li>
+        <li><a href="#home" class="nav-link"><span class="nav-index">00</span><span>Home</span></a></li>
+        <li><a href="#games" class="nav-link"><span class="nav-index">01</span><span>Games</span></a></li>
+        <li><a href="#tools" class="nav-link"><span class="nav-index">02</span><span>Tools</span></a></li>
+        <li><a href="#skills" class="nav-link"><span class="nav-index">03</span><span>Skills</span></a></li>
+        <li><a href="#about" class="nav-link"><span class="nav-index">04</span><span>About Me</span></a></li>
+        <li><a href="#contact" class="nav-link"><span class="nav-index">05</span><span>Contact</span></a></li>
       </ul>
     </nav>
 
-    <div class="header__social">
+    <div class="menu__social">
       <a href="mailto:oultrox@gmail.com" aria-label="Email" title="oultrox@gmail.com">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
       </a>
@@ -76,11 +78,6 @@
 
     <div class="home-hero__content">
       <div class="home-hero__frame">
-        <span class="home-hero__corner home-hero__corner--tl" aria-hidden="true"></span>
-        <span class="home-hero__corner home-hero__corner--tr" aria-hidden="true"></span>
-        <span class="home-hero__corner home-hero__corner--bl" aria-hidden="true"></span>
-        <span class="home-hero__corner home-hero__corner--br" aria-hidden="true"></span>
-
         <span class="home-hero__eyebrow">JESÚS PÉREZ · AKA OULTROX</span>
         <h1 class="home-hero__title">Senior Gameplay Engineer</h1>
         <p class="home-hero__subtitle">
@@ -99,7 +96,7 @@
   <section class="home-projects" id="games">
     <div class="home-projects__shell">
       <div class="home-projects__intro">
-        <span class="home-projects__eyebrow">PUBLISHED GAMES</span>
+        <span class="home-projects__eyebrow" data-index="01">PUBLISHED GAMES</span>
         <h2 class="home-projects__title">
           Shipped titles across mobile, web, and Steam
         </h2>
@@ -423,7 +420,7 @@
   <section class="home-projects" id="tools">
     <div class="home-projects__shell">
       <div class="home-projects__intro">
-        <span class="home-projects__eyebrow">TOOLS &amp; FRAMEWORKS</span>
+        <span class="home-projects__eyebrow" data-index="02">TOOLS &amp; FRAMEWORKS</span>
         <h2 class="home-projects__title">
           My own tools and architecture frameworks
         </h2>
@@ -590,7 +587,7 @@
   <section class="home-skills" id="skills">
     <div class="home-skills__shell">
       <div class="home-skills__intro">
-        <span class="home-skills__eyebrow">SKILLS</span>
+        <span class="home-skills__eyebrow" data-index="03">SKILLS</span>
         <h2 class="home-skills__title">Technical focus and production strengths</h2>
       </div>
 
@@ -654,7 +651,7 @@
   <section class="home-about" id="about">
     <div class="home-about__shell">
       <div class="home-about__content">
-        <span class="home-about__eyebrow">ABOUT ME</span>
+        <span class="home-about__eyebrow" data-index="04">ABOUT ME</span>
         <h2 class="home-about__title">Game creation isn't just my profession, it's my passion</h2>
 
         <div class="home-about__copy">

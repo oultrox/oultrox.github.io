@@ -8,29 +8,21 @@ const navMenu = document.getElementById("nav-menu");
 const navLinks = Array.from(document.querySelectorAll(".nav-link"));
 const backToTop = document.getElementById("back-to-top");
 
-// --- Navbar background + back-to-top on scroll -------------------
+// --- Back-to-top + active section on scroll ----------------------
 const onScroll = () => {
-  if (window.scrollY >= 60) {
-    header.classList.add("header-bg");
-  } else {
-    header.classList.remove("header-bg");
-  }
-
   if (backToTop) {
     backToTop.classList.toggle("visible", window.scrollY > 400);
   }
-
   highlightActiveSection();
 };
 
-// --- Back to top -------------------------------------------------
 if (backToTop) {
   backToTop.addEventListener("click", () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
-window.addEventListener("scroll", onScroll);
+window.addEventListener("scroll", onScroll, { passive: true });
 
 // --- Mobile menu toggle ------------------------------------------
 const closeMenu = () => {
@@ -58,7 +50,7 @@ window.addEventListener("resize", () => {
   if (window.innerWidth > 900) closeMenu();
 });
 
-// --- Highlight nav link for the section in view ------------------
+// --- Highlight menu entry for the section in view ----------------
 const sections = navLinks
   .map((link) => document.querySelector(link.getAttribute("href")))
   .filter(Boolean);
@@ -72,6 +64,12 @@ function highlightActiveSection() {
       activeId = section.id;
     }
   }
+  if (
+    window.innerHeight + window.scrollY >=
+    document.documentElement.scrollHeight - 2
+  ) {
+    activeId = sections[sections.length - 1].id;
+  }
 
   navLinks.forEach((link) => {
     const isActive = link.getAttribute("href") === `#${activeId}`;
@@ -79,32 +77,40 @@ function highlightActiveSection() {
   });
 }
 
-// --- Hero corner parallax (desktop, fine pointer only) ----------
-const hero = document.getElementById("home");
-const finePointer = window.matchMedia(
-  "(min-width: 769px) and (hover: hover) and (pointer: fine)"
-);
+// --- Wipe-in reveal for panels -----------------------------------
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-if (hero && finePointer.matches) {
-  const MAX = 34;
-  let raf = null;
+if (!reduceMotion.matches) {
+  let pending = Array.from(
+    document.querySelectorAll(
+      ".home-projects__intro, .home-skills__intro, .game-card, .home-project-card, .home-skills__column, .home-about__shell"
+    )
+  );
 
-  hero.addEventListener("mousemove", (e) => {
-    const rect = hero.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width - 0.5;
-    const ny = (e.clientY - rect.top) / rect.height - 0.5;
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      hero.style.setProperty("--px", (nx * MAX).toFixed(1) + "px");
-      hero.style.setProperty("--py", (ny * MAX).toFixed(1) + "px");
-      raf = null;
+  pending.forEach((el) => el.classList.add("reveal"));
+
+  const revealInView = () => {
+    if (!pending.length) return;
+    const line = window.innerHeight * 0.95;
+
+    pending = pending.filter((el) => {
+      if (el.getBoundingClientRect().top < line) {
+        el.classList.add("is-in");
+        return false;
+      }
+      return true;
     });
-  });
 
-  hero.addEventListener("mouseleave", () => {
-    hero.style.setProperty("--px", "0px");
-    hero.style.setProperty("--py", "0px");
-  });
+    if (!pending.length) {
+      window.removeEventListener("scroll", revealInView);
+      window.removeEventListener("resize", revealInView);
+    }
+  };
+
+  window.addEventListener("scroll", revealInView, { passive: true });
+  window.addEventListener("resize", revealInView);
+  window.addEventListener("load", revealInView);
+  revealInView();
 }
 
 // Initial state on load
