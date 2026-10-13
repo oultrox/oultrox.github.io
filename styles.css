@@ -427,22 +427,40 @@ a {
 .home-hero__mask::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 0 0 -1px 0;
   background: linear-gradient(
       90deg,
       rgba(23, 26, 33, 0.94) 0%,
-      rgba(27, 31, 44, 0.78) 40%,
+      rgba(23, 26, 33, 0.78) 40%,
       rgba(23, 26, 33, 0.4) 72%,
       rgba(23, 26, 33, 0.3) 100%
     ),
     linear-gradient(
       to bottom,
       rgba(23, 26, 33, 0.1) 0%,
-      rgba(23, 26, 33, 0.16) 58%,
-      rgba(23, 26, 33, 0.4) 78%,
-      rgba(23, 26, 33, 0.85) 94%,
+      rgba(23, 26, 33, 0.16) 46%,
+      rgba(23, 26, 33, 0.34) 60%,
+      rgba(23, 26, 33, 0.58) 71%,
+      rgba(23, 26, 33, 0.8) 80%,
+      rgba(23, 26, 33, 0.93) 87%,
+      rgba(23, 26, 33, 0.985) 93%,
+      var(--bg) 97%,
       var(--bg) 100%
     );
+}
+
+.home-hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 34%;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 70%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 70%);
+  pointer-events: none;
 }
 
 .home-hero__content {
@@ -537,14 +555,8 @@ a {
   left: 0;
   bottom: 0;
   width: 100%;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    var(--accent-soft) 0%,
-    var(--accent-soft) 160px,
-    var(--line) 160px,
-    transparent 100%
-  );
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0%, transparent 100%);
 }
 
 .home-projects__eyebrow,
@@ -995,18 +1007,6 @@ a {
     rgba(23, 26, 33, 0.35) 100%
   );
   pointer-events: none;
-}
-
-.home-about__photo-frame::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 46%;
-  height: 10px;
-  background: var(--accent-soft);
-  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
-  z-index: 1;
 }
 
 .home-about__photo {
